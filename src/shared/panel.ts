@@ -7,6 +7,10 @@ export const PANEL_CSP =
 export const PANEL_CSP_CDN =
   "default-src 'none'; style-src 'unsafe-inline' https://cdn.jsdelivr.net; script-src https://cdn.jsdelivr.net 'unsafe-inline'; img-src data:;";
 
+export function panelWebviewCsp(cspSource: string): string {
+  return `default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src ${cspSource} 'unsafe-inline'; img-src data:;`;
+}
+
 export interface PanelDocumentOptions {
   title: string;
   csp?: string;
@@ -45,7 +49,7 @@ export function panelBaseStyles(
   t: PanelTheme,
   options: { padding?: string; minHeight?: string } = {},
 ): string {
-  const padding = options.padding ?? "16px";
+  const padding = options.padding ?? "10px 12px";
   const minHeight = options.minHeight ?? "100vh";
 
   return `
@@ -55,7 +59,7 @@ export function panelBaseStyles(
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: ${t.bg};
       color: ${t.text};
-      line-height: 1.5;
+      line-height: 1.45;
       padding: ${padding};
       min-height: ${minHeight};
     }
@@ -68,22 +72,22 @@ export function panelHeaderStyles(t: PanelTheme): string {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 8px;
+      gap: 8px;
+      margin-bottom: 6px;
     }
 
     .header-main { min-width: 0; flex: 1; }
 
     .header h1 {
-      font-size: 1.5rem;
+      font-size: 1.15rem;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
 
     .header p {
       color: ${t.muted};
-      font-size: 0.9rem;
-      margin-top: 4px;
+      font-size: 0.72rem;
+      margin-top: 1px;
     }
   `;
 }
@@ -96,9 +100,9 @@ export function panelToolbarBtnStyles(t: PanelTheme): string {
       border: 1px solid ${t.border};
       background: ${t.surface};
       color: ${t.text};
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-size: 0.85rem;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.72rem;
       font-weight: 500;
       cursor: pointer;
       white-space: nowrap;
@@ -139,18 +143,18 @@ export function panelLoadingStyles(t: PanelTheme): string {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: calc(100vh - 120px);
+      min-height: calc(100vh - 100px);
       text-align: center;
     }
 
     .spinner {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
       border: 3px solid ${t.accentSoft};
       border-top-color: ${t.accent};
       border-radius: 50%;
       animation: panel-spin 0.8s linear infinite;
-      margin: 0 auto 16px;
+      margin: 0 auto 12px;
       flex-shrink: 0;
     }
 
@@ -163,17 +167,17 @@ export function panelLoadingStyles(t: PanelTheme): string {
 
     @keyframes panel-spin { to { transform: rotate(360deg); } }
 
-    .loading h2 { font-size: 1.2rem; margin-bottom: 8px; }
-    .loading p { color: ${t.muted}; font-size: 0.9rem; }
+    .loading h2 { font-size: 1rem; margin-bottom: 6px; }
+    .loading p { color: ${t.muted}; font-size: 0.75rem; }
   `;
 }
 
-export function panelStatGridStyles(minWidth = "120px"): string {
+export function panelStatGridStyles(minWidth = "110px"): string {
   return `
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(${minWidth}, 1fr));
-      gap: 10px;
+      gap: 8px;
       margin-bottom: 8px;
     }
   `;
@@ -184,21 +188,21 @@ export function panelStatCardStyles(t: PanelTheme): string {
     .stat-card {
       background: ${t.surface};
       border: 1px solid ${t.border};
-      border-radius: 12px;
-      padding: 12px 14px;
+      border-radius: 10px;
+      padding: 8px 10px;
       box-shadow: ${t.shadow};
     }
 
     .stat-card .label {
-      font-size: 0.75rem;
+      font-size: 0.62rem;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       color: ${t.muted};
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .stat-card .value {
-      font-size: 1.5rem;
+      font-size: 1.1rem;
       font-weight: 700;
       letter-spacing: -0.02em;
       font-variant-numeric: tabular-nums;
@@ -223,11 +227,11 @@ export function panelBannerStyles(t: PanelTheme): string {
     .banner {
       display: none;
       align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      margin-bottom: 8px;
-      font-size: 0.9rem;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-size: 0.75rem;
       font-weight: 500;
     }
 
@@ -250,8 +254,8 @@ export function panelTabsStyles(t: PanelTheme): string {
   return `
     .tabs {
       display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
+      gap: 6px;
+      margin-bottom: 6px;
       flex-wrap: wrap;
     }
 
@@ -260,9 +264,9 @@ export function panelTabsStyles(t: PanelTheme): string {
       border: 1px solid ${t.border};
       background: ${t.surface};
       color: ${t.muted};
-      padding: 6px 12px;
+      padding: 4px 10px;
       border-radius: 999px;
-      font-size: 0.8rem;
+      font-size: 0.72rem;
       cursor: pointer;
     }
 
@@ -284,13 +288,13 @@ export function panelListStyles(t: PanelTheme): string {
     .file-list {
       background: ${t.surface};
       border: 1px solid ${t.border};
-      border-radius: 12px;
+      border-radius: 10px;
       overflow: hidden;
       box-shadow: ${t.shadow};
     }
 
     .file-list {
-      max-height: 420px;
+      max-height: 360px;
       overflow-y: auto;
     }
 
@@ -298,22 +302,22 @@ export function panelListStyles(t: PanelTheme): string {
     .file-item {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       width: 100%;
       text-align: left;
-      padding: 10px 14px;
+      padding: 6px 10px;
       border: none;
       border-bottom: 1px solid ${t.border};
       background: transparent;
       color: ${t.text};
       cursor: pointer;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 0.8rem;
+      font-size: 0.72rem;
     }
 
     .file-item {
       display: grid;
-      grid-template-columns: 72px 1fr;
+      grid-template-columns: 64px 1fr;
       align-items: start;
       font-family: inherit;
     }
@@ -344,25 +348,25 @@ export function panelListStyles(t: PanelTheme): string {
 
     .detail {
       color: ${t.muted};
-      font-size: 0.72rem;
+      font-size: 0.65rem;
       flex-shrink: 0;
     }
 
     .file-error {
       grid-column: 2;
       color: ${t.error};
-      font-size: 0.76rem;
+      font-size: 0.68rem;
       margin-top: 2px;
     }
 
     .empty {
-      padding: 16px;
+      padding: 12px;
       text-align: center;
       color: ${t.muted};
-      font-size: 0.9rem;
+      font-size: 0.75rem;
       background: ${t.surface};
       border: 1px solid ${t.border};
-      border-radius: 12px;
+      border-radius: 10px;
     }
   `;
 }
@@ -371,8 +375,8 @@ export function panelBadgeStyles(t: PanelTheme): string {
   return `
     .badge {
       display: inline-block;
-      font-size: 0.72rem;
-      padding: 2px 8px;
+      font-size: 0.62rem;
+      padding: 2px 6px;
       border-radius: 999px;
       font-weight: 600;
       flex-shrink: 0;
@@ -392,29 +396,29 @@ export function panelBadgeStyles(t: PanelTheme): string {
 
 export function panelSectionStyles(t: PanelTheme): string {
   return `
-    .section-block { margin-bottom: 20px; }
+    .section-block { margin-bottom: 12px; }
 
     .section-block h2 {
-      font-size: 1.05rem;
+      font-size: 0.82rem;
       font-weight: 700;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       letter-spacing: -0.01em;
     }
 
     .entry-section,
     .card {
-      margin-top: 12px;
+      margin-top: 8px;
       background: ${t.surface};
       border: 1px solid ${t.border};
-      border-radius: 12px;
-      padding: 12px;
+      border-radius: 10px;
+      padding: 8px 10px;
       box-shadow: ${t.shadow};
     }
 
     .entry-section h3,
     .card h3 {
-      font-size: 0.85rem;
-      margin-bottom: 8px;
+      font-size: 0.72rem;
+      margin-bottom: 6px;
       color: ${t.muted};
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -423,10 +427,10 @@ export function panelSectionStyles(t: PanelTheme): string {
     .entry-section ul {
       list-style: none;
       font-family: ui-monospace, Menlo, monospace;
-      font-size: 0.78rem;
+      font-size: 0.68rem;
     }
 
-    .entry-section li { padding: 2px 0; }
+    .entry-section li { padding: 1px 0; }
 
     .entry-link {
       appearance: none;
@@ -443,14 +447,14 @@ export function panelSectionStyles(t: PanelTheme): string {
 
     .note,
     .meta {
-      margin-top: 10px;
-      font-size: 0.8rem;
+      margin-top: 6px;
+      font-size: 0.72rem;
       color: ${t.muted};
     }
 
     .note code {
       font-family: ui-monospace, Menlo, monospace;
-      font-size: 0.78rem;
+      font-size: 0.68rem;
     }
 
     .muted { color: ${t.muted}; }
@@ -462,9 +466,9 @@ export function panelProgressStyles(t: PanelTheme): string {
     .progress-section {
       background: ${t.surface};
       border: 1px solid ${t.border};
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
       box-shadow: ${t.shadow};
     }
 
@@ -472,9 +476,9 @@ export function panelProgressStyles(t: PanelTheme): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      font-size: 0.85rem;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: 0.75rem;
     }
 
     .progress-top .pct {
@@ -483,11 +487,11 @@ export function panelProgressStyles(t: PanelTheme): string {
     }
 
     .bar-track {
-      height: 8px;
+      height: 6px;
       background: ${t.barTrack};
       border-radius: 99px;
       overflow: hidden;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
 
     .bar-fill {
@@ -500,14 +504,14 @@ export function panelProgressStyles(t: PanelTheme): string {
 
     .current-file {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 0.8rem;
+      font-size: 0.72rem;
       color: ${t.muted};
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .actions { margin-bottom: 12px; }
+    .actions { margin-bottom: 8px; }
   `;
 }
 
@@ -530,28 +534,28 @@ export function panelCompactToolbarStyles(t: PanelTheme): string {
       flex-shrink: 0;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
       flex-wrap: wrap;
-      padding: 10px 14px;
+      padding: 8px 12px;
       border-bottom: 1px solid ${t.border};
       background: ${t.surface};
     }
 
     .toolbar-title {
       min-width: 0;
-      flex: 1 1 180px;
+      flex: 1 1 160px;
     }
 
     .toolbar-title h1 {
-      font-size: 1rem;
+      font-size: 0.88rem;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
 
     .toolbar-title p {
       color: ${t.muted};
-      font-size: 0.72rem;
-      margin-top: 2px;
+      font-size: 0.68rem;
+      margin-top: 1px;
       font-family: ui-monospace, Menlo, monospace;
       white-space: nowrap;
       overflow: hidden;
@@ -561,13 +565,13 @@ export function panelCompactToolbarStyles(t: PanelTheme): string {
     .toolbar-meta {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
     }
 
     .chip {
-      font-size: 0.72rem;
-      padding: 4px 10px;
+      font-size: 0.65rem;
+      padding: 3px 8px;
       border-radius: 999px;
       border: 1px solid ${t.border};
       background: ${t.bg};

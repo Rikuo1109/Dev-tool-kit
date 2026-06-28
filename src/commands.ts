@@ -9,10 +9,59 @@ interface CommandDefinition {
   id: string;
   errorTitle: string;
   uriHint?: string;
+  resolveFolderFromWorkspace?: boolean;
+  resolveFileFromEditor?: boolean;
   handler: (uri?: vscode.Uri) => Promise<void>;
 }
 
-const COMMANDS: CommandDefinition[] = [
+async function resolveFolderUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
+  if (uri) {
+    return uri;
+  }
+
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders?.length) {
+    vscode.window.showWarningMessage("Open a workspace folder first.");
+    return undefined;
+  }
+
+  if (folders.length === 1) {
+    return folders[0].uri;
+  }
+
+  const pick = await vscode.window.showQuickPick(
+    folders.map((folder) => ({
+      label: folder.name,
+      description: folder.uri.fsPath,
+      folder,
+    })),
+    { placeHolder: "Select workspace folder" },
+  );
+
+  return pick?.folder.uri;
+}
+
+async function resolveFileUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
+  if (uri) {
+    return uri;
+  }
+
+  const activeEditor = vscode.window.activeTextEditor;
+  const activeUri = activeEditor?.document.uri;
+  if (
+    activeUri?.scheme === "file" &&
+    vscode.workspace.getWorkspaceFolder(activeUri)
+  ) {
+    return activeUri;
+  }
+
+  vscode.window.showWarningMessage(
+    "Open a workspace file in the editor, or right-click a file in Explorer and choose Code Graph.",
+  );
+  return undefined;
+}
+
+const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
   {
     id: "kyo-tools.initAiTemplate",
     errorTitle: "Init AI Template failed",
@@ -23,9 +72,9 @@ const COMMANDS: CommandDefinition[] = [
   {
     id: "code-dashboard.open",
     errorTitle: "Failed to analyze folder",
-    uriHint: "Right-click a folder in Explorer and choose Code Dashboard.",
+    resolveFolderFromWorkspace: true,
     handler: async (uri) => {
-      await openDashboard(uri!.fsPath);
+      await openDashboard(uri!.fsPath, extensionUri);
     },
   },
   {
@@ -39,7 +88,7 @@ const COMMANDS: CommandDefinition[] = [
   {
     id: "kyo-tools.codeGraph",
     errorTitle: "Failed to build code graph",
-    uriHint: "Right-click a file in Explorer and choose Code Graph.",
+    resolveFileFromEditor: true,
     handler: async (uri) => {
       await openCodeGraph(uri!);
     },
@@ -47,7 +96,7 @@ const COMMANDS: CommandDefinition[] = [
   {
     id: "kyo-tools.deadCode",
     errorTitle: "Dead code scan failed",
-    uriHint: "Right-click a folder in Explorer and choose Dead Code Scan.",
+    resolveFolderFromWorkspace: true,
     handler: async (uri) => {
       await scanDeadCodeInFolder(uri!);
     },
@@ -58,9 +107,26 @@ function formatError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function wrapHandler(definition: CommandDefinition): (...args: unknown[]) => Promise<void> {
+function wrapHandler(
+  definition: CommandDefinition,
+  extensionUri: vscode.Uri,
+): (...args: unknown[]) => Promise<void> {
   return async (...args: unknown[]) => {
-    const uri = args[0] as vscode.Uri | undefined;
+    let uri = args[0] as vscode.Uri | undefined;
+
+    if (definition.resolveFolderFromWorkspace && !uri) {
+      uri = await resolveFolderUri();
+      if (!uri) {
+        return;
+      }
+    }
+
+    if (definition.resolveFileFromEditor && !uri) {
+      uri = await resolveFileUri();
+      if (!uri) {
+        return;
+      }
+    }
 
     if (definition.uriHint && !uri) {
       vscode.window.showWarningMessage(definition.uriHint);
@@ -76,9 +142,11 @@ function wrapHandler(definition: CommandDefinition): (...args: unknown[]) => Pro
 }
 
 export function registerCommands(context: vscode.ExtensionContext): void {
-  for (const definition of COMMANDS) {
+  const extensionUri = context.extensionUri;
+
+  for (const definition of createCommands(extensionUri)) {
     context.subscriptions.push(
-      vscode.commands.registerCommand(definition.id, wrapHandler(definition)),
+      vscode.commands.registerCommand(definition.id, wrapHandler(definition, extensionUri)),
     );
   }
 }

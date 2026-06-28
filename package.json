@@ -82,7 +82,7 @@
         },
         {
           "command": "code-dashboard.open",
-          "when": "false"
+          "when": "workspaceFolderCount != 0"
         },
         {
           "command": "kyo-tools.organizeImports",
@@ -90,11 +90,11 @@
         },
         {
           "command": "kyo-tools.codeGraph",
-          "when": "false"
+          "when": "workspaceFolderCount != 0"
         },
         {
           "command": "kyo-tools.deadCode",
-          "when": "false"
+          "when": "workspaceFolderCount != 0"
         }
       ],
       "explorer/context": [
@@ -135,17 +135,19 @@
     "install:local": "yarn vsix && cursor --install-extension kyo-tools-0.0.1.vsix --force"
   },
   "devDependencies": {
-    "@types/vscode": "^1.105.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "typescript-eslint": "^8.61.1",
-    "eslint": "^10.5.0",
-    "typescript": "^6.0.3",
-    "ts-loader": "^9.6.2",
-    "webpack": "^5.107.2",
-    "webpack-cli": "^7.0.3",
+    "@types/vscode": "^1.105.0",
     "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "@vscode/test-electron": "^3.0.0",
+    "chart.js": "^4.5.1",
+    "copy-webpack-plugin": "^14.0.0",
+    "eslint": "^10.5.0",
+    "ts-loader": "^9.6.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1",
+    "webpack": "^5.107.2",
+    "webpack-cli": "^7.0.3"
   },
   "overrides": {
     "diff": "^8.0.4",

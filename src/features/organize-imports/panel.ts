@@ -110,23 +110,23 @@ function getPanelHtml(
         display: none;
         background: ${t.errorSoft};
         border: 1px solid ${t.error};
-        border-radius: 12px;
-        padding: 14px 16px;
-        margin-bottom: 16px;
+        border-radius: 10px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
       }
 
       .error-summary.visible { display: block; }
 
       .error-summary h3 {
-        font-size: 0.85rem;
+        font-size: 0.72rem;
         color: ${t.error};
-        margin-bottom: 10px;
+        margin-bottom: 6px;
       }
 
       .error-summary-item {
-        font-size: 0.8rem;
+        font-size: 0.72rem;
         color: ${t.text};
-        padding: 6px 0;
+        padding: 4px 0;
         border-top: 1px solid ${t.border};
       }
 

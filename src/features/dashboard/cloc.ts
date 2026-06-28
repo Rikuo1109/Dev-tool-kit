@@ -26,14 +26,9 @@ export interface LangStat {
 import { GitChangeStats, formatGitChartLabels } from "./gitChanges";
 import { escapeHtml } from "../../shared/html";
 import {
-  panelBaseStyles,
+  panelContentStyles,
   panelDocument,
-  panelHeaderStyles,
-  panelSectionStyles,
-  panelStatCardStyles,
-  panelStatGridStyles,
-  panelToolbarBtnStyles,
-  PANEL_CSP_CDN,
+  panelWebviewCsp,
   renderPanelHeader,
 } from "../../shared/panel";
 import { getPanelTheme } from "../../shared/theme";
@@ -130,7 +125,16 @@ export function parseClocData(
   };
 }
 
-export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
+export interface DashboardWebviewAssets {
+  chartScriptUri: string;
+  cspSource: string;
+}
+
+export function getDashboardHtml(
+  data: DashboardData,
+  isDark: boolean,
+  assets: DashboardWebviewAssets,
+): string {
   const theme = getPanelTheme(isDark);
 
   const chartColors = data.languages.map(
@@ -255,50 +259,42 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
   </section>`;
 
   const dashboardStyles = `
-    ${panelBaseStyles(theme)}
-    ${panelHeaderStyles(theme)}
-    ${panelToolbarBtnStyles(theme)}
-    ${panelStatGridStyles("140px")}
-    ${panelStatCardStyles(theme)}
-    ${panelSectionStyles(theme)}
-
-    .header { margin-bottom: 12px; }
-    .header h1 { font-size: 1.75rem; margin-bottom: 2px; }
-    .stats { margin-bottom: 12px; }
+    ${panelContentStyles(theme)}
 
     .git-unavailable {
       background: ${theme.surface};
       border: 1px dashed ${theme.border};
-      border-radius: 12px;
-      padding: 14px 16px;
+      border-radius: 10px;
+      padding: 8px 10px;
       color: ${theme.muted};
-      font-size: 0.9rem;
+      font-size: 0.75rem;
     }
 
     .git-chart-card {
       background: ${theme.surface};
       border: 1px solid ${theme.border};
-      border-radius: 14px;
-      padding: 14px 16px 10px;
+      border-radius: 10px;
+      padding: 10px 12px 8px;
       box-shadow: ${theme.shadow};
     }
 
     .git-chart-wrap {
       position: relative;
-      height: 280px;
+      height: 200px;
     }
 
     .git-chart-note {
-      margin-top: 10px;
-      font-size: 0.78rem;
+      margin-top: 6px;
+      font-size: 0.65rem;
       color: ${theme.muted};
+      line-height: 1.4;
     }
 
     .overview {
       display: grid;
-      grid-template-columns: minmax(260px, 340px) 1fr;
-      gap: 14px;
-      margin-bottom: 20px;
+      grid-template-columns: minmax(220px, 280px) 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
       align-items: start;
     }
 
@@ -309,39 +305,39 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     .chart-card, .legend-card {
       background: ${theme.surface};
       border: 1px solid ${theme.border};
-      border-radius: 14px;
-      padding: 14px 16px;
+      border-radius: 10px;
+      padding: 10px 12px;
       box-shadow: ${theme.shadow};
     }
 
     .chart-card h2, .section-title {
-      font-size: 0.85rem;
+      font-size: 0.68rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: ${theme.muted};
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       font-weight: 600;
     }
 
     .chart-wrap {
       position: relative;
-      max-width: 280px;
+      max-width: 220px;
       margin: 0 auto;
     }
 
     .legend-list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 4px;
     }
 
     .legend-item {
       display: grid;
-      grid-template-columns: 12px 1fr auto auto;
-      gap: 10px;
+      grid-template-columns: 10px 1fr auto auto;
+      gap: 8px;
       align-items: center;
-      padding: 8px 10px;
-      border-radius: 8px;
+      padding: 4px 6px;
+      border-radius: 6px;
       transition: background 0.15s;
     }
 
@@ -350,39 +346,39 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     }
 
     .legend-dot {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
     }
 
     .legend-name {
       font-weight: 500;
-      font-size: 0.9rem;
+      font-size: 0.75rem;
     }
 
     .legend-files {
-      font-size: 0.8rem;
+      font-size: 0.68rem;
       color: ${theme.muted};
     }
 
     .legend-code {
       font-weight: 600;
-      font-size: 0.85rem;
+      font-size: 0.72rem;
       font-variant-numeric: tabular-nums;
     }
 
     .languages {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
     }
 
     .lang-card {
       background: ${theme.surface};
       border: 1px solid ${theme.border};
-      border-radius: 14px;
-      padding: 14px 16px;
+      border-radius: 10px;
+      padding: 10px 12px;
       box-shadow: ${theme.shadow};
     }
 
@@ -390,33 +386,33 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 8px;
+      gap: 8px;
+      margin-bottom: 6px;
     }
 
     .lang-title {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .lang-dot {
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: var(--lang-color);
       flex-shrink: 0;
     }
 
     .lang-title h3 {
-      font-size: 1.05rem;
+      font-size: 0.88rem;
       font-weight: 600;
     }
 
     .lang-meta {
       display: flex;
-      gap: 12px;
-      font-size: 0.85rem;
+      gap: 8px;
+      font-size: 0.72rem;
       color: ${theme.muted};
     }
 
@@ -426,11 +422,11 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     }
 
     .lang-bar-wrap {
-      height: 6px;
+      height: 5px;
       background: ${theme.barTrack};
       border-radius: 99px;
       overflow: hidden;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .lang-bar {
@@ -444,10 +440,10 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     .lang-stats {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
-      font-size: 0.85rem;
+      gap: 8px;
+      font-size: 0.72rem;
       color: ${theme.muted};
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
 
     .lang-stats strong {
@@ -456,38 +452,38 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
 
     .file-tables {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 8px;
     }
 
     .file-table-title {
-      font-size: 0.72rem;
+      font-size: 0.62rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: ${theme.muted};
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       font-weight: 600;
     }
 
     .top-files {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.82rem;
+      font-size: 0.72rem;
     }
 
     .top-files th {
       text-align: left;
-      padding: 8px 10px;
+      padding: 4px 6px;
       color: ${theme.muted};
       font-weight: 600;
-      font-size: 0.72rem;
+      font-size: 0.62rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border-bottom: 1px solid ${theme.border};
     }
 
     .top-files td {
-      padding: 8px 10px;
+      padding: 4px 6px;
       border-bottom: 1px solid ${theme.border};
       vertical-align: middle;
     }
@@ -501,10 +497,11 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     }
 
     .rank {
-      width: 24px;
-      padding-right: 4px;
+      width: 20px;
+      padding-right: 2px;
       color: ${theme.muted};
       font-variant-numeric: tabular-nums;
+      font-size: 0.68rem;
     }
 
     .file-path {
@@ -526,7 +523,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       white-space: nowrap;
       font: inherit;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 0.8rem;
+      font-size: 0.68rem;
       color: ${theme.accent};
       cursor: pointer;
       text-align: left;
@@ -544,11 +541,11 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
 
     .col-code,
     .col-other {
-      width: 48px;
-      max-width: 48px;
-      padding-left: 6px !important;
-      padding-right: 6px !important;
-      font-size: 0.78rem;
+      width: 42px;
+      max-width: 42px;
+      padding-left: 4px !important;
+      padding-right: 4px !important;
+      font-size: 0.68rem;
     }
 
     .top-files th.col-code,
@@ -561,7 +558,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
 
   return panelDocument({
     title: "Code Dashboard",
-    csp: PANEL_CSP_CDN,
+    csp: panelWebviewCsp(assets.cspSource),
     styles: dashboardStyles,
     body: `
   ${renderPanelHeader("Code Dashboard", escapeHtml(data.folderName), reloadBtn)}
@@ -576,7 +573,6 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       <div class="value">${data.totalFiles.toLocaleString()}</div>
     </div>
     <div class="stat-card">
-      <div class="label">Languages</div>
       <div class="value">${data.languages.length}</div>
     </div>
     <div class="stat-card">
@@ -619,7 +615,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
   <h2 class="section-title">Top files by language</h2>
   <div class="languages">${langCards}</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="${escapeHtml(assets.chartScriptUri)}"></script>
   <script>
     const vscode = acquireVsCodeApi();
 
@@ -725,7 +721,13 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
           interaction: { mode: "index", intersect: false },
           plugins: {
             legend: {
-              labels: { color: gitText, boxWidth: 12, usePointStyle: true },
+              labels: {
+                color: gitText,
+                boxWidth: 10,
+                usePointStyle: true,
+                font: { size: 10 },
+                padding: 8,
+              },
             },
             tooltip: {
               callbacks: {
@@ -742,11 +744,11 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
           },
           scales: {
             x: {
-              ticks: { color: gitMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+              ticks: { color: gitMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 10, font: { size: 10 } },
               grid: { color: gitGrid },
             },
             y: {
-              ticks: { color: gitMuted },
+              ticks: { color: gitMuted, font: { size: 10 } },
               grid: { color: gitGrid },
             },
           },

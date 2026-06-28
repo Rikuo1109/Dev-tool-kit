@@ -7,7 +7,10 @@ import { getGitChangeStats } from "./gitChanges";
 
 let activePanel: vscode.WebviewPanel | undefined;
 
-export async function openDashboard(folder: string): Promise<void> {
+export async function openDashboard(
+  folder: string,
+  extensionUri: vscode.Uri,
+): Promise<void> {
   const folderName = folder.split(/[/\\]/).pop() ?? folder;
 
   if (activePanel) {
@@ -20,7 +23,11 @@ export async function openDashboard(folder: string): Promise<void> {
       "codeDashboard",
       `Code Dashboard — ${folderName}`,
       vscode.ViewColumn.One,
-      { enableScripts: true, retainContextWhenHidden: true },
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(extensionUri, "media")],
+      },
     );
 
     activePanel = panel;
@@ -53,7 +60,14 @@ export async function openDashboard(folder: string): Promise<void> {
           const gitChanges = getGitChangeStats(folder);
           const data = parseClocData(raw, folder, folderName, gitChanges);
 
-          panel.webview.html = getDashboardHtml(data, isDarkTheme());
+          const chartScriptUri = panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(extensionUri, "media", "chart.umd.min.js"),
+          );
+
+          panel.webview.html = getDashboardHtml(data, isDarkTheme(), {
+            chartScriptUri: chartScriptUri.toString(),
+            cspSource: panel.webview.cspSource,
+          });
         },
       );
     };

@@ -42,11 +42,6 @@ function graphStyles(t: GraphTheme): string {
     ${panelToolbarBtnStyles(t)}
     ${panelLoadingStyles(t)}
 
-    .toolbar-btn {
-      padding: 6px 12px;
-      font-size: 0.72rem;
-    }
-
     .copy-control {
       display: flex;
       align-items: center;
@@ -54,8 +49,8 @@ function graphStyles(t: GraphTheme): string {
     }
 
     .copy-select {
-      padding: 6px 8px;
-      font-size: 0.72rem;
+      padding: 5px 6px;
+      font-size: 0.65rem;
       border: 1px solid ${t.border};
       border-radius: 6px;
       background: ${t.bg};
@@ -70,8 +65,8 @@ function graphStyles(t: GraphTheme): string {
     }
 
     .legend-item {
-      font-size: 0.68rem;
-      padding: 3px 8px;
+      font-size: 0.62rem;
+      padding: 2px 6px;
       border-radius: 999px;
       font-weight: 600;
       white-space: nowrap;
@@ -95,10 +90,10 @@ function graphStyles(t: GraphTheme): string {
 
     .hint {
       position: absolute;
-      right: 12px;
-      bottom: 10px;
-      padding: 4px 10px;
-      font-size: 0.68rem;
+      right: 10px;
+      bottom: 8px;
+      padding: 3px 8px;
+      font-size: 0.62rem;
       color: ${t.muted};
       background: ${t.surface};
       border: 1px solid ${t.border};
@@ -109,16 +104,16 @@ function graphStyles(t: GraphTheme): string {
 
     .layer-labels {
       position: absolute;
-      left: 12px;
+      left: 10px;
       top: 0;
       bottom: 0;
-      width: 88px;
+      width: 72px;
       pointer-events: none;
       display: flex;
       flex-direction: column;
       justify-content: space-around;
-      padding: 72px 0 36px;
-      font-size: 0.62rem;
+      padding: 56px 0 28px;
+      font-size: 0.58rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -357,7 +352,7 @@ export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
         color: paletteForNode(node.id, group),
         font: {
           color: "${t.text}",
-          size: isRoot ? 13 : 12,
+          size: isRoot ? 12 : 11,
           face: "ui-monospace, Menlo, monospace",
         },
         borderWidth: selected.has(node.id) ? 3 : isRoot ? 2 : expanded.has(node.id) ? 2 : 1,
