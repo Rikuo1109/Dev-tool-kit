@@ -1,23 +1,37 @@
 import * as vscode from "vscode";
 import { execFileSync } from "child_process";
 import { getDashboardHtml, parseClocData } from "./dashboard";
+import { organizeImportsInFolder } from "./organizeImports";
 
 export function activate(context: vscode.ExtensionContext) {
-  const cmd = vscode.commands.registerCommand(
-    "code-dashboard.open",
-    async (uri?: vscode.Uri) => {
-      if (!uri) {
-        vscode.window.showWarningMessage(
-          "Right-click a folder in Explorer and choose Code Dashboard.",
-        );
-        return;
-      }
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "code-dashboard.open",
+      async (uri?: vscode.Uri) => {
+        if (!uri) {
+          vscode.window.showWarningMessage(
+            "Right-click a folder in Explorer and choose Code Dashboard.",
+          );
+          return;
+        }
 
-      await openDashboard(uri.fsPath);
-    },
+        await openDashboard(uri.fsPath);
+      },
+    ),
+    vscode.commands.registerCommand(
+      "kyo-tools.organizeImports",
+      async (uri?: vscode.Uri) => {
+        if (!uri) {
+          vscode.window.showWarningMessage(
+            "Right-click a folder in Explorer and choose Organize Imports.",
+          );
+          return;
+        }
+
+        await organizeImportsInFolder(uri);
+      },
+    ),
   );
-
-  context.subscriptions.push(cmd);
 }
 
 async function openDashboard(folder: string) {
@@ -44,7 +58,8 @@ async function openDashboard(folder: string) {
 
         const raw = JSON.parse(output) as Record<string, unknown>;
         const data = parseClocData(raw, folder, folderName);
-        const isDark = vscode.window.activeColorTheme.kind !== vscode.ColorThemeKind.Light;
+        const isDark =
+          vscode.window.activeColorTheme.kind !== vscode.ColorThemeKind.Light;
 
         const panel = vscode.window.createWebviewPanel(
           "codeDashboard",

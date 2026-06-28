@@ -1,8 +1,9 @@
 {
   "name": "kyo-tools",
   "displayName": "kyo-tools",
-  "description": "",
+  "description": "Code dashboard and bulk organize imports for folders",
   "version": "0.0.1",
+  "publisher": "kyoriku",
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -10,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:code-dashboard.open"
+    "onCommand:code-dashboard.open",
+    "onCommand:kyo-tools.organizeImports"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -19,6 +21,11 @@
         "command": "code-dashboard.open",
         "title": "Code Dashboard",
         "category": "Kyo Tools"
+      },
+      {
+        "command": "kyo-tools.organizeImports",
+        "title": "Organize Imports",
+        "category": "Kyo Tools"
       }
     ],
     "menus": {
@@ -26,11 +33,20 @@
         {
           "command": "code-dashboard.open",
           "when": "false"
+        },
+        {
+          "command": "kyo-tools.organizeImports",
+          "when": "false"
         }
       ],
       "explorer/context": [
         {
           "command": "code-dashboard.open",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        },
+        {
+          "command": "kyo-tools.organizeImports",
           "when": "explorerResourceIsFolder",
           "group": "navigation"
         }
@@ -46,7 +62,9 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "yarn run compile-tests && yarn run compile && yarn run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "vsix": "yarn package && npx @vscode/vsce package --no-dependencies --allow-missing-repository",
+    "install:local": "yarn vsix && cursor --install-extension kyo-tools-0.0.1.vsix --force"
   },
   "devDependencies": {
     "@types/vscode": "^1.105.0",
