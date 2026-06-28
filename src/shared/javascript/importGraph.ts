@@ -1,7 +1,17 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { EXCLUDE_GLOB, SOURCE_GLOB } from "./constants";
+import { ANALYZE_SOURCE_GLOB, EXCLUDE_GLOB } from "../constants";
+import { filterGitIgnoredPaths, findGitRoot } from "../gitignore";
+import { getSourceLanguage } from "../language";
+import {
+  buildJavaTypeIndex,
+  JavaTypeIndex,
+  parseJavaImports,
+} from "../java/graph";
+import { discoverJavaEntryPoints } from "../java/entryPoints";
+import { parsePythonImports } from "../python/graph";
+import { discoverPythonEntryPoints } from "../python/entryPoints";
 
 const RESOLVE_EXTENSIONS = [
   "",
@@ -11,10 +21,13 @@ const RESOLVE_EXTENSIONS = [
   ".jsx",
   ".mjs",
   ".cjs",
+  ".py",
+  ".java",
   "/index.ts",
   "/index.tsx",
   "/index.js",
   "/index.jsx",
+  "/__init__.py",
 ];
 
 const IMPORT_FROM_RE =
@@ -50,6 +63,7 @@ export interface ImportIndex {
   getImporters: (absPath: string) => string[];
   getImports: (absPath: string) => ParsedImport[];
   resolve: (fromFile: string, specifier: string) => string | "external" | null;
+  javaTypeIndex: JavaTypeIndex;
 }
 
 export type ResolvedImport =
@@ -63,7 +77,7 @@ export async function buildImportIndex(
 ): Promise<ImportIndex> {
   const workspaceRoot = workspaceFolder.uri.fsPath;
   const uris = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(workspaceFolder, SOURCE_GLOB),
+    new vscode.RelativePattern(workspaceFolder, ANALYZE_SOURCE_GLOB),
     EXCLUDE_GLOB,
   );
 
@@ -78,27 +92,14 @@ export async function buildImportIndex(
     }
   }
 
-  const files = uris
-    .map((uri) => normalizePath(uri.fsPath))
-    .filter((filePath) => !excluded.has(filePath));
-
-  const entryPoints = await findEntryPoints(
-    workspaceFolder,
-    workspaceRoot,
-    entryGlobs,
+  const files = filterGitIgnoredPaths(
+    findGitRoot(workspaceRoot) ?? workspaceRoot,
+    uris
+      .map((uri) => normalizePath(uri.fsPath))
+      .filter((filePath) => !excluded.has(filePath)),
   );
-  for (const filePath of files) {
-    if (/(^|\/)(vite|webpack|jest|eslint|prettier|tailwind|postcss|next)\.config\.(t|j)sx?$/i.test(filePath)) {
-      entryPoints.add(filePath);
-    }
-  }
 
   const contentCache = new Map<string, string>();
-  const tsConfigCache = new Map<string, TsConfigContext>();
-  const dependencies = new Map<string, Set<string>>();
-  const importers = new Map<string, Set<string>>();
-  const importsByFile = new Map<string, ParsedImport[]>();
-
   const getContent = (absPath: string): string => {
     const cached = contentCache.get(absPath);
     if (cached !== undefined) {
@@ -108,6 +109,44 @@ export async function buildImportIndex(
     contentCache.set(absPath, text);
     return text;
   };
+
+  const javaFiles = files.filter(
+    (filePath) => getSourceLanguage(filePath) === "java",
+  );
+  const javaTypeIndex = buildJavaTypeIndex(javaFiles, getContent);
+
+  const entryPoints = await findEntryPoints(
+    workspaceFolder,
+    workspaceRoot,
+    entryGlobs,
+  );
+  for (const filePath of filterGitIgnoredPaths(
+    findGitRoot(workspaceRoot) ?? workspaceRoot,
+    discoverJavaEntryPoints(
+      workspaceRoot,
+      javaFiles,
+      javaTypeIndex,
+      getContent,
+    ),
+  )) {
+    entryPoints.add(filePath);
+  }
+  for (const filePath of filterGitIgnoredPaths(
+    findGitRoot(workspaceRoot) ?? workspaceRoot,
+    discoverPythonEntryPoints(workspaceRoot),
+  )) {
+    entryPoints.add(normalizePath(filePath));
+  }
+  for (const filePath of files) {
+    if (/(^|\/)(vite|webpack|jest|eslint|prettier|tailwind|postcss|next)\.config\.(t|j)sx?$/i.test(filePath)) {
+      entryPoints.add(filePath);
+    }
+  }
+
+  const tsConfigCache = new Map<string, TsConfigContext>();
+  const dependencies = new Map<string, Set<string>>();
+  const importers = new Map<string, Set<string>>();
+  const importsByFile = new Map<string, ParsedImport[]>();
 
   const getTsConfig = (fromFile: string): TsConfigContext => {
     const dir = path.dirname(fromFile);
@@ -134,8 +173,12 @@ export async function buildImportIndex(
   };
 
   for (const filePath of files) {
-    const parsed = parseDetailedImports(getContent(filePath), filePath, (spec) =>
-      resolve(filePath, spec),
+    const parsed = parseDetailedImports(
+      getContent(filePath),
+      filePath,
+      (spec) => resolve(filePath, spec),
+      workspaceRoot,
+      javaTypeIndex,
     );
     importsByFile.set(filePath, parsed);
 
@@ -162,6 +205,7 @@ export async function buildImportIndex(
     getImporters: (absPath) => [...(importers.get(absPath) ?? [])],
     getImports: (absPath) => importsByFile.get(absPath) ?? [],
     resolve,
+    javaTypeIndex,
   };
 }
 
@@ -226,14 +270,44 @@ async function findEntryPoints(
     }
   }
 
-  return entries;
+  const gitRoot = findGitRoot(workspaceRoot) ?? workspaceRoot;
+  return new Set(filterGitIgnoredPaths(gitRoot, [...entries]));
 }
 
 function parseDetailedImports(
   content: string,
   filePath: string,
   resolveFn: (specifier: string) => string | "external" | null,
+  workspaceRoot: string,
+  javaTypeIndex: JavaTypeIndex,
 ): ParsedImport[] {
+  const language = getSourceLanguage(filePath);
+
+  if (language === "python") {
+    return parsePythonImports(content, filePath, workspaceRoot).map(
+      (resolvedPath) => ({
+        specifier: resolvedPath,
+        resolvedPath,
+        named: new Set<string>(),
+        defaultImport: false,
+        namespace: false,
+        sideEffect: true,
+      }),
+    );
+  }
+
+  if (language === "java") {
+    return parseJavaImports(content, filePath, javaTypeIndex).map(
+      (resolvedPath) => ({
+      specifier: resolvedPath,
+      resolvedPath,
+      named: new Set<string>(),
+      defaultImport: false,
+      namespace: false,
+      sideEffect: true,
+    }));
+  }
+
   const source = filePath.endsWith(".vue") ? extractVueScript(content) : content;
   const results: ParsedImport[] = [];
   const seen = new Set<string>();

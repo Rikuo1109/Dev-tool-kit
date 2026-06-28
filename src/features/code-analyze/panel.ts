@@ -8,10 +8,40 @@ import {
   renderPanelHeader,
 } from "../../shared/panel";
 import { getPanelTheme, PanelTheme } from "../../shared/theme";
-import { CodeAnalyzeReport } from "./types";
+import { CodeAnalyzeReport, DuplicateGroup } from "./types";
 
 function rowDataAttrs(absolutePath: string, line = 0): string {
   return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
+}
+
+function buildDuplicateAiMessage(group: DuplicateGroup): string {
+  const kindLabel =
+    group.kind === "exact"
+      ? "Exact duplicate"
+      : "Structural duplicate (same shape, different names/literals)";
+  const locations = group.locations
+    .map((loc) => `- ${loc.relativePath}:${loc.startLine}-${loc.endLine}`)
+    .join("\n");
+
+  return [
+    "Please help refactor duplicated code in this codebase.",
+    "",
+    `Type: ${kindLabel}`,
+    `Size: ${group.lineCount} lines across ${group.locations.length} locations`,
+    "",
+    "Locations:",
+    locations,
+    "",
+    "Duplicated code preview:",
+    "```",
+    group.preview,
+    "```",
+    "",
+    "Suggested approach:",
+    group.suggestion,
+    "",
+    "Extract shared logic, update all locations to use it, and preserve existing behavior.",
+  ].join("\n");
 }
 
 const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
@@ -94,6 +124,26 @@ function panelExtraStyles(t: PanelTheme): string {
     }
 
     .loc-btn:hover {
+      background: ${t.surfaceHover};
+      border-color: ${t.accent};
+      color: ${t.accent};
+    }
+
+    .copy-ai-btn {
+      appearance: none;
+      border: 1px solid ${t.border};
+      background: ${t.bg};
+      color: ${t.muted};
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 0.65rem;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
+    .copy-ai-btn:hover {
       background: ${t.surfaceHover};
       border-color: ${t.accent};
       color: ${t.accent};
@@ -192,6 +242,7 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
           <div class="duplicate-head">
             <span class="badge ${badgeClass}">${group.kind}</span>
             <span class="detail">${group.lineCount} lines · ${group.locations.length} locations</span>
+            <button type="button" class="copy-ai-btn" data-copy="${encodeURIComponent(buildDuplicateAiMessage(group))}">Copy for AI</button>
           </div>
           <pre class="duplicate-preview">${escapeHtml(group.preview)}</pre>
           <div class="loc-list">${locations}</div>
@@ -343,6 +394,16 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
           el.addEventListener("click", () => openFromElement(el));
         });
 
+        document.querySelectorAll(".copy-ai-btn").forEach((btn) => {
+          btn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const text = decodeURIComponent(btn.dataset.copy || "");
+            if (text) {
+              vscode.postMessage({ type: "copy", text });
+            }
+          });
+        });
+
         ${reloadPanelScript()}
       </script>
     `,
@@ -367,6 +428,14 @@ export class CodeAnalyzePanel {
             ? message.line
             : 0;
         await openFileInEditor(message.path, line);
+        return;
+      }
+
+      if (message.type === "copy" && typeof message.text === "string") {
+        await vscode.env.clipboard.writeText(message.text);
+        void vscode.window.showInformationMessage(
+          "Copied duplicate prompt for AI",
+        );
         return;
       }
 

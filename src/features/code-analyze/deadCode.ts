@@ -1,6 +1,15 @@
 import * as vscode from "vscode";
-import { isActiveBarrel, isReexportOnlyBarrel } from "../../shared/barrelFiles";
-import { ImportIndex, findReachableFiles } from "../../shared/importGraph";
+import { isJavaScriptSource } from "../../shared/language";
+import {
+  isActiveBarrel,
+  isReexportOnlyBarrel,
+} from "../../shared/javascript/barrelFiles";
+import {
+  ImportIndex,
+  findReachableFiles,
+} from "../../shared/javascript/importGraph";
+import { findUnusedJavaExports } from "./javaExports";
+import { findUnusedPythonExports } from "./pythonExports";
 import { lineAt, scriptContent } from "./sourceUtils";
 import {
   AnalyzeFileItem,
@@ -17,6 +26,14 @@ const DEFAULT_ENTRY_GLOBS = [
   "**/next.config.*",
   "**/pages/_app.{tsx,jsx}",
   "**/app/layout.{tsx,jsx}",
+  "**/main.py",
+  "**/__main__.py",
+  "**/app.py",
+  "**/manage.py",
+  "**/wsgi.py",
+  "**/asgi.py",
+  "**/Main.java",
+  "**/*Application.java",
 ];
 
 const DEFAULT_EXCLUDE_GLOBS = [
@@ -24,6 +41,11 @@ const DEFAULT_EXCLUDE_GLOBS = [
   "**/*.spec.{ts,tsx,js,jsx}",
   "**/__tests__/**",
   "**/__mocks__/**",
+  "**/test_*.py",
+  "**/*_test.py",
+  "**/tests/**",
+  "**/*Test.java",
+  "**/test/**",
 ];
 
 export function getAnalyzeConfig(): CodeAnalyzeConfig {
@@ -99,17 +121,21 @@ export function findUnusedExports(
   const items: UnusedExportItem[] = [];
 
   for (const filePath of scopedFiles) {
+    if (!isJavaScriptSource(filePath)) {
+      continue;
+    }
+
     const content = index.getContent(filePath);
     if (isReexportOnlyBarrel(content, filePath)) {
       continue;
     }
 
-    const exports = extractExports(content, filePath);
+    const exports = extractJavaScriptExports(content, filePath);
     if (exports.length === 0) {
       continue;
     }
 
-    const usage = collectExportUsage(index, filePath);
+    const usage = collectJavaScriptExportUsage(index, filePath);
     for (const exp of exports) {
       if (exp.isTypeOnly || usage.namespaceImports) {
         continue;
@@ -125,6 +151,11 @@ export function findUnusedExports(
       }
     }
   }
+
+  items.push(...findUnusedPythonExports(scopedFiles, index));
+  items.push(
+    ...findUnusedJavaExports(scopedFiles, index, index.javaTypeIndex),
+  );
 
   return items.sort(
     (a, b) =>
@@ -155,7 +186,7 @@ interface ExtractedExport {
   line?: number;
 }
 
-function extractExports(content: string, filePath: string): ExtractedExport[] {
+function extractJavaScriptExports(content: string, filePath: string): ExtractedExport[] {
   const source = scriptContent(content, filePath);
   const exports: ExtractedExport[] = [];
   const seen = new Set<string>();
@@ -251,7 +282,7 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
   return exports;
 }
 
-function collectExportUsage(
+function collectJavaScriptExportUsage(
   index: ImportIndex,
   modulePath: string,
 ): {

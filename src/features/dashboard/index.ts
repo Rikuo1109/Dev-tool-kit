@@ -1,5 +1,6 @@
 import { execFileSync } from "child_process";
 import * as vscode from "vscode";
+import { isGitRepository } from "../../shared/gitignore";
 import { isDarkTheme } from "../../shared/html";
 import { openFileInEditor } from "../../shared/openInEditor";
 import { getDashboardHtml, parseClocData } from "./cloc";
@@ -45,16 +46,15 @@ export async function openDashboard(
           cancellable: false,
         },
         async () => {
-          const output = execFileSync(
-            "cloc",
-            [
-              folder,
-              "--json",
-              "--by-file",
-              "--exclude-dir=node_modules,dist,build,.git",
-            ],
-            { encoding: "utf-8" },
-          );
+          const clocArgs = ["--json", "--by-file"];
+          if (isGitRepository(folder)) {
+            clocArgs.push("--vcs=git");
+          } else {
+            clocArgs.push("--exclude-dir=node_modules,dist,build,.git");
+          }
+          clocArgs.push(folder);
+
+          const output = execFileSync("cloc", clocArgs, { encoding: "utf-8" });
 
           const raw = JSON.parse(output) as Record<string, unknown>;
           const gitChanges = getGitChangeStats(folder);

@@ -37,6 +37,11 @@
         "command": "kyo-tools.codeAnalyze",
         "title": "Code Analyze",
         "category": "Kyo Tools"
+      },
+      {
+        "command": "kyo-tools.preMergeReview",
+        "title": "Pre-Merge Review",
+        "category": "Kyo Tools"
       }
     ],
     "configuration": {
@@ -55,7 +60,15 @@
             "**/vite.config.*",
             "**/next.config.*",
             "**/pages/_app.{tsx,jsx}",
-            "**/app/layout.{tsx,jsx}"
+            "**/app/layout.{tsx,jsx}",
+            "**/main.py",
+            "**/__main__.py",
+            "**/app.py",
+            "**/manage.py",
+            "**/wsgi.py",
+            "**/asgi.py",
+            "**/Main.java",
+            "**/*Application.java"
           ],
           "description": "Glob patterns for entry points excluded from unused-file detection."
         },
@@ -68,7 +81,12 @@
             "**/*.test.{ts,tsx,js,jsx}",
             "**/*.spec.{ts,tsx,js,jsx}",
             "**/__tests__/**",
-            "**/__mocks__/**"
+            "**/__mocks__/**",
+            "**/test_*.py",
+            "**/*_test.py",
+            "**/tests/**",
+            "**/*Test.java",
+            "**/test/**"
           ],
           "description": "Glob patterns excluded from code analyze."
         },
@@ -119,6 +137,17 @@
         {
           "command": "kyo-tools.codeAnalyze",
           "when": "workspaceFolderCount != 0"
+        },
+        {
+          "command": "kyo-tools.preMergeReview",
+          "when": "workspaceFolderCount != 0"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "kyo-tools.preMergeReview",
+          "when": "scmProvider == git && workspaceFolderCount != 0",
+          "group": "navigation@99"
         }
       ],
       "explorer/context": [

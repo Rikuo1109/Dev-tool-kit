@@ -1,8 +1,8 @@
-import { ImportIndex } from "../../shared/importGraph";
+import { ImportIndex } from "../../shared/javascript/importGraph";
 import {
   blockLineCount,
   exactNormalize,
-  extractBraceBlocks,
+  extractCodeBlocks,
   previewLines,
   scriptContent,
   structuralNormalize,
@@ -27,7 +27,7 @@ export function findDuplicateCode(
 
   for (const filePath of scopedFiles) {
     const source = scriptContent(index.getContent(filePath), filePath);
-    const blocks = extractBraceBlocks(source);
+    const blocks = extractCodeBlocks(source, filePath);
 
     for (const block of blocks) {
       const lineCount = blockLineCount(block);
@@ -45,14 +45,14 @@ export function findDuplicateCode(
 
       addBlock(buckets, {
         kind: "exact",
-        key: exactNormalize(block.text),
+        key: exactNormalize(block.text, filePath),
         lineCount,
         location,
         preview,
       });
 
-      const structuralKey = structuralNormalize(block.text);
-      if (structuralKey !== exactNormalize(block.text)) {
+      const structuralKey = structuralNormalize(block.text, filePath);
+      if (structuralKey !== exactNormalize(block.text, filePath)) {
         addBlock(buckets, {
           kind: "structural",
           key: structuralKey,
@@ -93,8 +93,8 @@ export function findDuplicateCode(
 
   return groups.sort(
     (a, b) =>
-      b.lineCount - a.lineCount ||
       b.locations.length - a.locations.length ||
+      b.lineCount - a.lineCount ||
       a.kind.localeCompare(b.kind),
   );
 }

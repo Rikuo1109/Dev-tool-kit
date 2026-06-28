@@ -4,7 +4,7 @@ import {
   buildImportIndex,
   isPathInsideFolder,
   normalizePath,
-} from "../../shared/importGraph";
+} from "../../shared/javascript/importGraph";
 import { isDarkTheme } from "../../shared/html";
 import {
   findOrphanModules,

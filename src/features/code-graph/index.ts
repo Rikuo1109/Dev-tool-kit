@@ -7,7 +7,7 @@ import {
   parseImports,
   resolveImport,
   toRelativePath,
-} from "../../shared/importGraph";
+} from "../../shared/javascript/importGraph";
 import { isDarkTheme } from "../../shared/html";
 import { openFileInEditor } from "../../shared/openInEditor";
 import { getCodeGraphHtml, getCodeGraphLoadingHtml } from "./panel";

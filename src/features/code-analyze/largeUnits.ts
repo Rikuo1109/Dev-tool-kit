@@ -1,8 +1,8 @@
-import { ImportIndex } from "../../shared/importGraph";
+import { ImportIndex } from "../../shared/javascript/importGraph";
 import {
   blockLineCount,
   countLoc,
-  extractBraceBlocks,
+  extractCodeBlocks,
   scriptContent,
 } from "./sourceUtils";
 import {
@@ -47,7 +47,7 @@ export function findLargeFunctions(
   for (const filePath of scopedFiles) {
     const source = scriptContent(index.getContent(filePath), filePath);
     const lines = source.split("\n");
-    const blocks = extractBraceBlocks(source);
+    const blocks = extractCodeBlocks(source, filePath);
 
     for (const block of blocks) {
       const snippetStart = Math.max(0, block.startLine - 4);
@@ -86,6 +86,9 @@ function extractFunctionName(snippet: string): string | undefined {
     /export\s+(?:async\s+)?function\s+(\w+)/,
     /(?:async\s+)?function\s+(\w+)/,
     /(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
+    /(?:async\s+)?def\s+(\w+)\s*\(/,
+    /(?:public|private|protected)\s+(?:static\s+)?(?:final\s+)?[\w<>,\[\]\s.?]+\s+(\w+)\s*\(/,
+    /[\w<>,\[\].\s?]+\s+(\w+)\s*\([^{;]*\)\s*\{/,
     /(\w+)\s*\([^)]*\)\s*\{/,
   ];
 
@@ -93,7 +96,9 @@ function extractFunctionName(snippet: string): string | undefined {
     const match = snippet.match(pattern);
     if (
       match?.[1] &&
-      !["if", "for", "while", "switch", "catch"].includes(match[1])
+      !["if", "for", "while", "switch", "catch", "class", "interface", "enum"].includes(
+        match[1],
+      )
     ) {
       return match[1];
     }
@@ -103,7 +108,8 @@ function extractFunctionName(snippet: string): string | undefined {
 }
 
 function countParams(signature: string): number {
-  const match = signature.match(/\(([^)]*)\)/);
+  const match =
+    signature.match(/\(([^)]*)\)/) ?? signature.match(/def\s+\w+\s*\(([^)]*)\)/);
   if (!match) {
     return 0;
   }

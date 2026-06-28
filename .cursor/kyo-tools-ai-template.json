@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "generator": "kyo-tools.initAiTemplate",
+  "components": ["gitnexus", "caveman-lite", "ponytail"]
+}
