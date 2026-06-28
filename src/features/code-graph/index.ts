@@ -10,10 +10,10 @@ import {
 } from "../../shared/importGraph";
 import { isDarkTheme } from "../../shared/html";
 import { openFileInEditor } from "../../shared/openInEditor";
-import { getCodeGraphHtml } from "./panel";
-import { CodeGraphData, GraphEdge, GraphNode } from "./types";
+import { getCodeGraphHtml, getCodeGraphLoadingHtml } from "./panel";
+import { CodeGraphData, GraphEdge, GraphExpansion, GraphNode } from "./types";
 
-export type { CodeGraphData } from "./types";
+export type { CodeGraphData, GraphExpansion } from "./types";
 
 export async function buildCodeGraph(
   fileUri: vscode.Uri,
@@ -30,34 +30,11 @@ export async function buildCodeGraph(
 
   onProgress?.("Analyzing imports…");
 
-  const dependencies = new Map<string, string>();
-  const externalDeps = new Set<string>();
-  const targetImports = parseImports(
-    await readText(fileUri),
-    fileUri.fsPath,
+  const dependencies = await collectDependencies(
+    normalizedTarget,
+    workspaceRoot,
+    tsConfig,
   );
-
-  for (const specifier of targetImports) {
-    const resolved = resolveImport(
-      fileUri.fsPath,
-      specifier,
-      workspaceRoot,
-      tsConfig,
-    );
-    if (!resolved) {
-      continue;
-    }
-    if (resolved.type === "external") {
-      externalDeps.add(resolved.name);
-      continue;
-    }
-    if (resolved.fsPath !== normalizedTarget) {
-      dependencies.set(
-        resolved.fsPath,
-        toRelativePath(resolved.fsPath, workspaceRoot),
-      );
-    }
-  }
 
   onProgress?.("Finding dependents…");
 
@@ -73,8 +50,92 @@ export async function buildCodeGraph(
     workspaceRoot,
     dependencies,
     dependents,
-    externalDeps,
   );
+}
+
+export async function expandGraphNode(
+  fileUri: vscode.Uri,
+  nodePath: string,
+): Promise<GraphExpansion> {
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
+  if (!workspaceFolder) {
+    throw new Error("File is not inside a workspace folder");
+  }
+
+  const workspaceRoot = workspaceFolder.uri.fsPath;
+  const normalizedCenter = normalizePath(nodePath);
+
+  if (!isInSrcFolder(normalizedCenter, workspaceRoot)) {
+    return { centerPath: normalizedCenter, nodes: [], edges: [] };
+  }
+
+  const centerUri = vscode.Uri.file(normalizedCenter);
+  const tsConfig = loadTsConfigForFile(normalizedCenter, workspaceRoot);
+  const dependencies = await collectDependencies(
+    normalizedCenter,
+    workspaceRoot,
+    tsConfig,
+  );
+  const dependents = await findDependents(
+    centerUri,
+    normalizedCenter,
+    workspaceRoot,
+    tsConfig,
+  );
+
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  for (const [depPath, rel] of dependencies) {
+    nodes.push({ id: depPath, label: rel, group: "dependency" });
+    edges.push({ from: normalizedCenter, to: depPath });
+  }
+
+  for (const [depPath, rel] of dependents) {
+    if (depPath === normalizedCenter) {
+      continue;
+    }
+    nodes.push({ id: depPath, label: rel, group: "dependent" });
+    edges.push({ from: depPath, to: normalizedCenter });
+  }
+
+  return { centerPath: normalizedCenter, nodes, edges };
+}
+
+async function collectDependencies(
+  filePath: string,
+  workspaceRoot: string,
+  tsConfig: ReturnType<typeof loadTsConfigForFile>,
+): Promise<Map<string, string>> {
+  const normalizedTarget = normalizePath(filePath);
+  const dependencies = new Map<string, string>();
+  const targetImports = parseImports(
+    await readText(vscode.Uri.file(filePath)),
+    filePath,
+  );
+
+  for (const specifier of targetImports) {
+    const resolved = resolveImport(
+      filePath,
+      specifier,
+      workspaceRoot,
+      tsConfig,
+    );
+    if (resolved?.type !== "internal") {
+      continue;
+    }
+    if (
+      resolved.fsPath !== normalizedTarget &&
+      isInSrcFolder(resolved.fsPath, workspaceRoot)
+    ) {
+      dependencies.set(
+        resolved.fsPath,
+        toRelativePath(resolved.fsPath, workspaceRoot),
+      );
+    }
+  }
+
+  return dependencies;
 }
 
 async function findDependents(
@@ -91,7 +152,9 @@ async function findDependents(
     workspaceRoot,
   );
   for (const [filePath, rel] of refDependents) {
-    dependents.set(filePath, rel);
+    if (isInSrcFolder(filePath, workspaceRoot)) {
+      dependents.set(filePath, rel);
+    }
   }
 
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
@@ -120,7 +183,8 @@ async function findDependents(
       );
       if (
         resolved?.type === "internal" &&
-        resolved.fsPath === normalizedTarget
+        resolved.fsPath === normalizedTarget &&
+        isInSrcFolder(candidatePath, workspaceRoot)
       ) {
         dependents.set(
           candidatePath,
@@ -165,6 +229,10 @@ async function findDependentsViaReferences(
       }
 
       if (!refPath.startsWith(normalizePath(workspaceRoot))) {
+        continue;
+      }
+
+      if (!isInSrcFolder(refPath, workspaceRoot)) {
         continue;
       }
 
@@ -248,12 +316,19 @@ function isExportLikeSymbol(kind: vscode.SymbolKind): boolean {
   );
 }
 
+function isInSrcFolder(absolutePath: string, workspaceRoot: string): boolean {
+  const relative = toRelativePath(
+    normalizePath(absolutePath),
+    workspaceRoot,
+  ).replace(/\\/g, "/");
+  return relative === "src" || relative.startsWith("src/");
+}
+
 function toGraphData(
   targetPath: string,
   workspaceRoot: string,
   dependencies: Map<string, string>,
   dependents: Map<string, string>,
-  externalDeps: Set<string>,
 ): CodeGraphData {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -280,21 +355,15 @@ function toGraphData(
     edges.push({ from: depPath, to: targetPath });
   }
 
-  for (const pkg of externalDeps) {
-    const id = `ext:${pkg}`;
-    addNode(id, pkg, "external");
-    edges.push({ from: targetPath, to: id });
-  }
-
   return {
     fileName: path.basename(targetPath),
     relativePath: targetLabel,
+    rootPath: targetPath,
     nodes,
     edges,
     stats: {
       dependencies: dependencies.size,
       dependents: dependents.size,
-      external: externalDeps.size,
     },
   };
 }
@@ -304,8 +373,57 @@ async function readText(uri: vscode.Uri): Promise<string> {
   return doc.getText();
 }
 
+function languageFromPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const byExt: Record<string, string> = {
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".js": "javascript",
+    ".jsx": "jsx",
+    ".json": "json",
+    ".md": "markdown",
+    ".css": "css",
+    ".scss": "scss",
+    ".html": "html",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".py": "python",
+    ".go": "go",
+    ".rs": "rust",
+    ".vue": "vue",
+    ".sql": "sql",
+    ".sh": "bash",
+  };
+  return byExt[ext] ?? "";
+}
+
+async function formatFilesForAi(
+  filePaths: string[],
+  workspaceRoot: string,
+): Promise<string> {
+  const blocks: string[] = [];
+
+  for (const filePath of filePaths) {
+    try {
+      const content = await readText(vscode.Uri.file(filePath));
+      const rel = toRelativePath(normalizePath(filePath), workspaceRoot);
+      const lang = languageFromPath(filePath);
+      const fence = lang ? `\`\`\`${lang}:${rel}` : `\`\`\`${rel}`;
+      blocks.push(`${fence}\n${content}\n\`\`\``);
+    } catch {
+      // Skip unreadable files.
+    }
+  }
+
+  return blocks.join("\n\n");
+}
+
 export async function openCodeGraph(fileUri: vscode.Uri): Promise<void> {
   const fileName = path.basename(fileUri.fsPath);
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
+  const relativePath = workspaceFolder
+    ? toRelativePath(fileUri.fsPath, workspaceFolder.uri.fsPath)
+    : fileName;
 
   const panel = vscode.window.createWebviewPanel(
     "kyoToolsCodeGraph",
@@ -314,24 +432,83 @@ export async function openCodeGraph(fileUri: vscode.Uri): Promise<void> {
     { enableScripts: true, retainContextWhenHidden: true },
   );
 
-  const render = async () => {
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `Building code graph for ${fileName}…`,
-        cancellable: false,
-      },
-      async (progress) => {
-        const data = await buildCodeGraph(fileUri, (message) => {
-          progress.report({ message });
-        });
-
-        panel.webview.html = getCodeGraphHtml(data, isDarkTheme());
-      },
+  const showLoading = (status?: string) => {
+    panel.webview.html = getCodeGraphLoadingHtml(
+      relativePath,
+      isDarkTheme(),
+      status,
     );
   };
 
+  showLoading();
+
+  const render = async () => {
+    showLoading();
+
+    try {
+      const data = await buildCodeGraph(fileUri, (message) => {
+        panel.webview.postMessage({ type: "loadingStatus", message });
+      });
+
+      panel.webview.html = getCodeGraphHtml(data, isDarkTheme());
+    } catch (error) {
+      const errMessage =
+        error instanceof Error ? error.message : "Failed to build code graph";
+      vscode.window.showErrorMessage(errMessage);
+      showLoading(errMessage);
+    }
+  };
+
   panel.webview.onDidReceiveMessage(async (message) => {
+    if (message.type === "copy" && typeof message.text === "string") {
+      await vscode.env.clipboard.writeText(message.text);
+      return;
+    }
+
+    if (message.type === "copyContent" && Array.isArray(message.paths)) {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
+      if (!workspaceFolder) {
+        return;
+      }
+
+      const paths = (message.paths as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      );
+      const text = await formatFilesForAi(
+        paths,
+        workspaceFolder.uri.fsPath,
+      );
+
+      if (!text) {
+        void vscode.window.showWarningMessage(
+          "Could not read selected files for copy",
+        );
+        return;
+      }
+
+      await vscode.env.clipboard.writeText(text);
+      void vscode.window.showInformationMessage(
+        `Copied content of ${paths.length} file(s) for AI`,
+      );
+      return;
+    }
+
+    if (message.type === "expand" && typeof message.path === "string") {
+      try {
+        const expansion = await expandGraphNode(fileUri, message.path);
+        panel.webview.postMessage({ type: "expandResult", ...expansion });
+      } catch (error) {
+        const errMessage =
+          error instanceof Error ? error.message : "Failed to expand node";
+        panel.webview.postMessage({
+          type: "expandError",
+          path: message.path,
+          message: errMessage,
+        });
+      }
+      return;
+    }
+
     if (message.type === "open" && typeof message.path === "string") {
       await openFileInEditor(message.path);
       return;

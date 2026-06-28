@@ -1,7 +1,7 @@
 export interface GraphNode {
   id: string;
   label: string;
-  group: "current" | "dependency" | "dependent" | "external";
+  group: "current" | "dependency" | "dependent";
 }
 
 export interface GraphEdge {
@@ -12,11 +12,17 @@ export interface GraphEdge {
 export interface CodeGraphData {
   fileName: string;
   relativePath: string;
+  rootPath: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
   stats: {
     dependencies: number;
     dependents: number;
-    external: number;
   };
+}
+
+export interface GraphExpansion {
+  centerPath: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
 }
