@@ -1,7 +1,7 @@
 {
   "name": "kyo-tools",
   "displayName": "kyo-tools",
-  "description": "Code dashboard and bulk organize imports for folders",
+  "description": "Code dashboard, organize imports, code graph, dead code detection, and AI template init",
   "version": "0.0.1",
   "publisher": "kyoriku",
   "engines": {
@@ -10,13 +10,14 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:code-dashboard.open",
-    "onCommand:kyo-tools.organizeImports"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "kyo-tools.initAiTemplate",
+        "title": "Init AI Template",
+        "category": "Kyo Tools"
+      },
       {
         "command": "code-dashboard.open",
         "title": "Code Dashboard",
@@ -26,8 +27,53 @@
         "command": "kyo-tools.organizeImports",
         "title": "Organize Imports",
         "category": "Kyo Tools"
+      },
+      {
+        "command": "kyo-tools.codeGraph",
+        "title": "Code Graph",
+        "category": "Kyo Tools"
+      },
+      {
+        "command": "kyo-tools.deadCode",
+        "title": "Dead Code Scan",
+        "category": "Kyo Tools"
       }
     ],
+    "configuration": {
+      "title": "Kyo Tools",
+      "properties": {
+        "kyo-tools.deadCode.entryGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/main.{ts,tsx,js,jsx}",
+            "**/index.{ts,tsx,js,jsx}",
+            "**/App.{tsx,jsx}",
+            "**/*.config.{ts,js,mjs,cjs}",
+            "**/vite.config.*",
+            "**/next.config.*",
+            "**/pages/_app.{tsx,jsx}",
+            "**/app/layout.{tsx,jsx}"
+          ],
+          "description": "Glob patterns for entry points excluded from unused-file detection."
+        },
+        "kyo-tools.deadCode.excludeGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/*.test.{ts,tsx,js,jsx}",
+            "**/*.spec.{ts,tsx,js,jsx}",
+            "**/__tests__/**",
+            "**/__mocks__/**"
+          ],
+          "description": "Glob patterns for files excluded from dead code analysis."
+        }
+      }
+    },
     "menus": {
       "commandPalette": [
         {
@@ -36,6 +82,14 @@
         },
         {
           "command": "kyo-tools.organizeImports",
+          "when": "false"
+        },
+        {
+          "command": "kyo-tools.codeGraph",
+          "when": "false"
+        },
+        {
+          "command": "kyo-tools.deadCode",
           "when": "false"
         }
       ],
@@ -48,6 +102,16 @@
         {
           "command": "kyo-tools.organizeImports",
           "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        },
+        {
+          "command": "kyo-tools.deadCode",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        },
+        {
+          "command": "kyo-tools.codeGraph",
+          "when": "!explorerResourceIsFolder",
           "group": "navigation"
         }
       ]

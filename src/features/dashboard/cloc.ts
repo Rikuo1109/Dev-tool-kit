@@ -7,6 +7,7 @@ interface ClocFileEntry {
 
 export interface FileStat {
   relativePath: string;
+  absolutePath: string;
   code: number;
   blank: number;
   comment: number;
@@ -19,6 +20,7 @@ export interface LangStat {
   blank: number;
   comment: number;
   topFiles: FileStat[];
+  smallestFiles: FileStat[];
 }
 
 export interface DashboardData {
@@ -67,6 +69,7 @@ export function parseClocData(
     const file: FileStat = {
       relativePath:
         relativePath || (key.split(/[/\\]/).pop() ?? key),
+      absolutePath: key.replace(/\\/g, "/"),
       code: entry.code,
       blank: entry.blank,
       comment: entry.comment,
@@ -79,14 +82,16 @@ export function parseClocData(
 
   const languages: LangStat[] = [...filesByLang.entries()]
     .map(([name, files]) => {
-      const sorted = [...files].sort((a, b) => b.code - a.code);
+      const sortedDesc = [...files].sort((a, b) => b.code - a.code);
+      const sortedAsc = [...files].sort((a, b) => a.code - b.code);
       return {
         name,
         nFiles: files.length,
         code: files.reduce((sum, f) => sum + f.code, 0),
         blank: files.reduce((sum, f) => sum + f.blank, 0),
         comment: files.reduce((sum, f) => sum + f.comment, 0),
-        topFiles: sorted.slice(0, TOP_FILES_PER_LANG),
+        topFiles: sortedDesc.slice(0, TOP_FILES_PER_LANG),
+        smallestFiles: sortedAsc.slice(0, TOP_FILES_PER_LANG),
       };
     })
     .sort((a, b) => b.code - a.code);
@@ -147,17 +152,48 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
           : "0";
       const color = chartColors[i];
 
-      const fileRows = lang.topFiles
-        .map(
-          (file, rank) => `
+      const fileRows = (files: FileStat[]) =>
+        files
+          .map(
+            (file, rank) => `
           <tr>
             <td class="rank">${rank + 1}</td>
-            <td class="file-path" title="${escapeHtml(file.relativePath)}">${escapeHtml(file.relativePath)}</td>
-            <td class="num">${file.code.toLocaleString()}</td>
-            <td class="num muted">${(file.blank + file.comment).toLocaleString()}</td>
+            <td class="file-path">
+              <button type="button" class="file-link" data-path="${escapeHtml(file.absolutePath)}" title="${escapeHtml(file.relativePath)}">${escapeHtml(file.relativePath)}</button>
+            </td>
+            <td class="num col-code">${file.code.toLocaleString()}</td>
+            <td class="num col-other muted">${(file.blank + file.comment).toLocaleString()}</td>
           </tr>`,
-        )
-        .join("");
+          )
+          .join("");
+
+      const renderTable = (files: FileStat[], title: string) =>
+        files.length > 0
+          ? `
+          <div class="file-table-block">
+            <h4 class="file-table-title">${title}</h4>
+            <table class="top-files">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>File</th>
+                  <th class="col-code">Code</th>
+                  <th class="col-other">Other</th>
+                </tr>
+              </thead>
+              <tbody>${fileRows(files)}</tbody>
+            </table>
+          </div>`
+          : "";
+
+      const fileTables =
+        lang.topFiles.length > 0 || lang.smallestFiles.length > 0
+          ? `
+          <div class="file-tables">
+            ${renderTable(lang.topFiles, "Top 5 largest")}
+            ${renderTable(lang.smallestFiles, "Top 5 smallest")}
+          </div>`
+          : "";
 
       return `
         <section class="lang-card" style="--lang-color: ${color}">
@@ -179,22 +215,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
             <span>${lang.blank.toLocaleString()} blank</span>
             <span>${lang.comment.toLocaleString()} comment</span>
           </div>
-          ${
-            lang.topFiles.length > 0
-              ? `
-          <table class="top-files">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>File</th>
-                <th>Code</th>
-                <th>Other</th>
-              </tr>
-            </thead>
-            <tbody>${fileRows}</tbody>
-          </table>`
-              : ""
-          }
+          ${fileTables}
         </section>`;
     })
     .join("");
@@ -219,7 +240,15 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     }
 
     .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
       margin-bottom: 28px;
+    }
+
+    .header-main {
+      min-width: 0;
     }
 
     .header h1 {
@@ -427,6 +456,21 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       color: ${theme.text};
     }
 
+    .file-tables {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .file-table-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: ${theme.muted};
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
     .top-files {
       width: 100%;
       border-collapse: collapse;
@@ -459,18 +503,39 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     }
 
     .rank {
-      width: 32px;
+      width: 24px;
+      padding-right: 4px;
       color: ${theme.muted};
       font-variant-numeric: tabular-nums;
     }
 
     .file-path {
+      width: auto;
       max-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .file-link {
+      appearance: none;
+      border: none;
+      background: none;
+      padding: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font: inherit;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 0.8rem;
+      color: ${theme.accent};
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .file-link:hover {
+      text-decoration: underline;
     }
 
     .num {
@@ -479,13 +544,55 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       white-space: nowrap;
     }
 
+    .col-code,
+    .col-other {
+      width: 48px;
+      max-width: 48px;
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+      font-size: 0.78rem;
+    }
+
+    .top-files th.col-code,
+    .top-files th.col-other {
+      text-align: right;
+    }
+
     .muted { color: ${theme.muted}; }
+
+    .toolbar-btn {
+      appearance: none;
+      border: 1px solid ${theme.border};
+      background: ${theme.surface};
+      color: ${theme.text};
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .toolbar-btn:hover {
+      background: ${theme.surfaceHover};
+      border-color: ${theme.accent};
+      color: ${theme.accent};
+    }
+
+    .toolbar-btn:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
   </style>
 </head>
 <body>
   <header class="header">
-    <h1>Code Dashboard</h1>
-    <p>${escapeHtml(data.folderName)}</p>
+    <div class="header-main">
+      <h1>Code Dashboard</h1>
+      <p>${escapeHtml(data.folderName)}</p>
+    </div>
+    <button type="button" class="toolbar-btn" id="reload-btn">Reload</button>
   </header>
 
   <div class="stats">
@@ -541,6 +648,26 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
+    const vscode = acquireVsCodeApi();
+
+    document.querySelectorAll(".file-link").forEach((el) => {
+      el.addEventListener("click", () => {
+        const path = el.getAttribute("data-path");
+        if (path) {
+          vscode.postMessage({ type: "open", path });
+        }
+      });
+    });
+
+    document.getElementById("reload-btn")?.addEventListener("click", (event) => {
+      const btn = event.currentTarget;
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = true;
+        btn.textContent = "Reloading…";
+      }
+      vscode.postMessage({ type: "reload" });
+    });
+
     const labels = ${JSON.stringify(data.languages.map((l) => l.name))};
     const values = ${JSON.stringify(data.languages.map((l) => l.code))};
     const colors = ${JSON.stringify(chartColors)};

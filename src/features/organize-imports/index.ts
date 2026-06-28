@@ -1,12 +1,11 @@
 import * as vscode from "vscode";
+import { EXCLUDE_GLOB, SOURCE_GLOB } from "../../shared/constants";
+import { isDarkTheme } from "../../shared/html";
 import {
   FileOrganizeResult,
   OrganizeImportsPanel,
   OrganizeReport,
-} from "./organizeImportsPanel";
-
-const SOURCE_GLOB = "**/*.{ts,tsx,js,jsx,mjs,cjs,vue}";
-const EXCLUDE_GLOB = "{**/node_modules/**,**/dist/**,**/build/**,**/.git/**}";
+} from "./panel";
 
 const ORGANIZE_KIND = vscode.CodeActionKind.SourceOrganizeImports.value;
 const REMOVE_UNUSED_KIND = vscode.CodeActionKind.Source.append(
@@ -29,8 +28,7 @@ export async function organizeImportsInFolder(
     return;
   }
 
-  const isDark =
-    vscode.window.activeColorTheme.kind !== vscode.ColorThemeKind.Light;
+  const isDark = isDarkTheme();
   const panel = OrganizeImportsPanel.open(folderName, files.length, isDark);
   const startedAt = Date.now();
 
