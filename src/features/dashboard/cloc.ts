@@ -591,7 +591,6 @@ export function getDashboardHtml(
       </div>
     </div>
     <div class="legend-card">
-      <h2>Languages</h2>
       <div class="legend-list">
         ${data.languages
           .map((lang, i) => {

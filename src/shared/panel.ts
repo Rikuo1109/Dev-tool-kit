@@ -405,7 +405,6 @@ export function panelSectionStyles(t: PanelTheme): string {
       letter-spacing: -0.01em;
     }
 
-    .entry-section,
     .card {
       margin-top: 8px;
       background: ${t.surface};
@@ -415,7 +414,6 @@ export function panelSectionStyles(t: PanelTheme): string {
       box-shadow: ${t.shadow};
     }
 
-    .entry-section h3,
     .card h3 {
       font-size: 0.72rem;
       margin-bottom: 6px;
@@ -423,27 +421,6 @@ export function panelSectionStyles(t: PanelTheme): string {
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
-
-    .entry-section ul {
-      list-style: none;
-      font-family: ui-monospace, Menlo, monospace;
-      font-size: 0.68rem;
-    }
-
-    .entry-section li { padding: 1px 0; }
-
-    .entry-link {
-      appearance: none;
-      border: none;
-      background: none;
-      padding: 0;
-      color: ${t.accent};
-      cursor: pointer;
-      font: inherit;
-      text-align: left;
-    }
-
-    .entry-link:hover { text-decoration: underline; }
 
     .note,
     .meta {

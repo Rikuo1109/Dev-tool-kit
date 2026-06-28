@@ -1,7 +1,7 @@
 {
   "name": "kyo-tools",
   "displayName": "kyo-tools",
-  "description": "Code dashboard, organize imports, code graph, dead code detection, and AI template init",
+  "description": "Code dashboard, organize imports, code graph, code analyze, and AI template init",
   "version": "0.0.1",
   "publisher": "kyoriku",
   "engines": {
@@ -34,15 +34,15 @@
         "category": "Kyo Tools"
       },
       {
-        "command": "kyo-tools.deadCode",
-        "title": "Dead Code Scan",
+        "command": "kyo-tools.codeAnalyze",
+        "title": "Code Analyze",
         "category": "Kyo Tools"
       }
     ],
     "configuration": {
       "title": "Kyo Tools",
       "properties": {
-        "kyo-tools.deadCode.entryGlobs": {
+        "kyo-tools.codeAnalyze.entryGlobs": {
           "type": "array",
           "items": {
             "type": "string"
@@ -59,7 +59,7 @@
           ],
           "description": "Glob patterns for entry points excluded from unused-file detection."
         },
-        "kyo-tools.deadCode.excludeGlobs": {
+        "kyo-tools.codeAnalyze.excludeGlobs": {
           "type": "array",
           "items": {
             "type": "string"
@@ -70,7 +70,31 @@
             "**/__tests__/**",
             "**/__mocks__/**"
           ],
-          "description": "Glob patterns for files excluded from dead code analysis."
+          "description": "Glob patterns excluded from code analyze."
+        },
+        "kyo-tools.codeAnalyze.duplicateMinLines": {
+          "type": "number",
+          "default": 6,
+          "minimum": 3,
+          "description": "Minimum non-empty lines for duplicate code detection."
+        },
+        "kyo-tools.codeAnalyze.largeFileLoc": {
+          "type": "number",
+          "default": 300,
+          "minimum": 50,
+          "description": "Warn when a file exceeds this many non-empty lines."
+        },
+        "kyo-tools.codeAnalyze.largeFunctionLoc": {
+          "type": "number",
+          "default": 80,
+          "minimum": 10,
+          "description": "Warn when a function body exceeds this many non-empty lines."
+        },
+        "kyo-tools.codeAnalyze.largeFunctionParams": {
+          "type": "number",
+          "default": 5,
+          "minimum": 2,
+          "description": "Warn when a function has more than this many parameters."
         }
       }
     },
@@ -93,7 +117,7 @@
           "when": "workspaceFolderCount != 0"
         },
         {
-          "command": "kyo-tools.deadCode",
+          "command": "kyo-tools.codeAnalyze",
           "when": "workspaceFolderCount != 0"
         }
       ],
@@ -104,7 +128,7 @@
           "group": "2_z_kyoTools@1"
         },
         {
-          "command": "kyo-tools.deadCode",
+          "command": "kyo-tools.codeAnalyze",
           "when": "explorerResourceIsFolder",
           "group": "2_z_kyoTools@2"
         },

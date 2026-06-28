@@ -1,22 +1,12 @@
-import * as path from "path";
 import * as vscode from "vscode";
-import {
-  ImportIndex,
-  buildImportIndex,
-  findReachableFiles,
-  isPathInsideFolder,
-  normalizePath,
-} from "../../shared/importGraph";
 import { isActiveBarrel, isReexportOnlyBarrel } from "../../shared/barrelFiles";
-import { isDarkTheme } from "../../shared/html";
-import { DeadCodePanel } from "./panel";
+import { ImportIndex, findReachableFiles } from "../../shared/importGraph";
+import { lineAt, scriptContent } from "./sourceUtils";
 import {
-  DeadCodeItem,
-  DeadCodeReport,
+  AnalyzeFileItem,
+  CodeAnalyzeConfig,
   UnusedExportItem,
 } from "./types";
-
-export type { DeadCodeItem, DeadCodeReport, UnusedExportItem } from "./types";
 
 const DEFAULT_ENTRY_GLOBS = [
   "**/main.{ts,tsx,js,jsx}",
@@ -36,99 +26,37 @@ const DEFAULT_EXCLUDE_GLOBS = [
   "**/__mocks__/**",
 ];
 
-export async function scanDeadCodeInFolder(
-  folderUri: vscode.Uri,
-  existingPanel?: DeadCodePanel,
-): Promise<void> {
-  const workspaceFolder = vscode.workspace.getWorkspaceFolder(folderUri);
-  if (!workspaceFolder) {
-    throw new Error("Folder is not inside a workspace");
-  }
+export function getAnalyzeConfig(): CodeAnalyzeConfig {
+  const config = vscode.workspace.getConfiguration("kyo-tools.codeAnalyze");
+  const legacy = vscode.workspace.getConfiguration("kyo-tools.deadCode");
 
-  const folderPath = normalizePath(folderUri.fsPath);
-  const folderName = path.basename(folderPath);
-  const config = vscode.workspace.getConfiguration("kyo-tools.deadCode");
-  const entryGlobs = config.get<string[]>("entryGlobs", DEFAULT_ENTRY_GLOBS);
-  const excludeGlobs = config.get<string[]>("excludeGlobs", DEFAULT_EXCLUDE_GLOBS);
+  const readArray = (key: string, fallback: string[]): string[] =>
+    config.get<string[]>(key) ?? legacy.get<string[]>(key, fallback);
 
-  const isDark = isDarkTheme();
-  const panel = existingPanel ?? DeadCodePanel.open(folderName, isDark);
-  panel.bindFolder(folderUri, () => scanDeadCodeInFolder(folderUri, panel));
-  if (existingPanel) {
-    panel.showLoading(folderName);
-  }
-  const startedAt = Date.now();
-
-  try {
-    const report = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `Scanning dead code in ${folderName}…`,
-        cancellable: false,
-      },
-      async (progress) => {
-        progress.report({ message: "Building import graph…" });
-        const index = await buildImportIndex(
-          workspaceFolder,
-          entryGlobs,
-          excludeGlobs,
-        );
-
-        progress.report({ message: "Finding unused files…" });
-        const scopedFiles = index.files.filter((file) =>
-          isPathInsideFolder(file, folderPath),
-        );
-
-        const unusedFiles = findUnusedFiles(scopedFiles, index);
-        progress.report({ message: "Finding orphan modules…" });
-        const orphanModules = findOrphanModules(scopedFiles, index);
-        progress.report({ message: "Finding unused exports…" });
-        const unusedExports = findUnusedExports(scopedFiles, index);
-
-        return {
-          folderName,
-          folderPath,
-          scannedFiles: scopedFiles.length,
-          unusedFiles,
-          orphanModules,
-          unusedExports,
-          entryPoints: [...index.entryPoints]
-            .filter((entry) => isPathInsideFolder(entry, folderPath))
-            .map((entry) => ({
-              relativePath: index.relativePath(entry),
-              absolutePath: entry,
-            })),
-          durationMs: Date.now() - startedAt,
-        };
-      },
-    );
-
-    panel.showReport(report);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Dead code scan failed";
-    vscode.window.showErrorMessage(message);
-    panel.dispose();
-  }
+  return {
+    entryGlobs: readArray("entryGlobs", DEFAULT_ENTRY_GLOBS),
+    excludeGlobs: readArray("excludeGlobs", DEFAULT_EXCLUDE_GLOBS),
+    duplicateMinLines: config.get<number>("duplicateMinLines", 6),
+    largeFileLoc: config.get<number>("largeFileLoc", 300),
+    largeFunctionLoc: config.get<number>("largeFunctionLoc", 80),
+    largeFunctionParams: config.get<number>("largeFunctionParams", 5),
+  };
 }
 
-function findUnusedFiles(
+export function findUnusedFiles(
   scopedFiles: string[],
   index: ImportIndex,
-): DeadCodeItem[] {
-  const items: DeadCodeItem[] = [];
+): AnalyzeFileItem[] {
+  const items: AnalyzeFileItem[] = [];
 
   for (const filePath of scopedFiles) {
     if (index.entryPoints.has(filePath)) {
       continue;
     }
-
     if (isActiveBarrel(filePath, index)) {
       continue;
     }
-
-    const importers = index.getImporters(filePath);
-    if (importers.length === 0) {
+    if (index.getImporters(filePath).length === 0) {
       items.push({
         relativePath: index.relativePath(filePath),
         absolutePath: filePath,
@@ -140,22 +68,20 @@ function findUnusedFiles(
   return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
-function findOrphanModules(
+export function findOrphanModules(
   scopedFiles: string[],
   index: ImportIndex,
-): DeadCodeItem[] {
+): AnalyzeFileItem[] {
   const reachable = findReachableFiles(index, index.entryPoints);
-  const items: DeadCodeItem[] = [];
+  const items: AnalyzeFileItem[] = [];
 
   for (const filePath of scopedFiles) {
     if (index.entryPoints.has(filePath) || reachable.has(filePath)) {
       continue;
     }
-
     if (isActiveBarrel(filePath, index, reachable)) {
       continue;
     }
-
     items.push({
       relativePath: index.relativePath(filePath),
       absolutePath: filePath,
@@ -166,7 +92,7 @@ function findOrphanModules(
   return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
-function findUnusedExports(
+export function findUnusedExports(
   scopedFiles: string[],
   index: ImportIndex,
 ): UnusedExportItem[] {
@@ -184,32 +110,26 @@ function findUnusedExports(
     }
 
     const usage = collectExportUsage(index, filePath);
-
     for (const exp of exports) {
-      if (exp.isTypeOnly) {
+      if (exp.isTypeOnly || usage.namespaceImports) {
         continue;
       }
-
-      if (usage.namespaceImports) {
-        continue;
-      }
-
       if (exp.isDefault) {
         if (!usage.defaultImport) {
           items.push(toExportItem(index, filePath, exp));
         }
         continue;
       }
-
       if (!usage.named.has(exp.name)) {
         items.push(toExportItem(index, filePath, exp));
       }
     }
   }
 
-  return items.sort((a, b) =>
-    a.relativePath.localeCompare(b.relativePath) ||
-    a.exportName.localeCompare(b.exportName),
+  return items.sort(
+    (a, b) =>
+      a.relativePath.localeCompare(b.relativePath) ||
+      a.exportName.localeCompare(b.exportName),
   );
 }
 
@@ -235,15 +155,8 @@ interface ExtractedExport {
   line?: number;
 }
 
-function lineAt(source: string, index: number): number {
-  return source.slice(0, index).split("\n").length;
-}
-
 function extractExports(content: string, filePath: string): ExtractedExport[] {
-  const source = filePath.endsWith(".vue")
-    ? content.match(/<script[^>]*>([\s\S]*?)<\/script>/gi)?.join("\n") ?? content
-    : content;
-
+  const source = scriptContent(content, filePath);
   const exports: ExtractedExport[] = [];
   const seen = new Set<string>();
 
@@ -277,7 +190,12 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
     regex.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = regex.exec(source)) !== null) {
-      addMatch(match, { name: match[1], kind, isDefault: false, isTypeOnly: false });
+      addMatch(match, {
+        name: match[1],
+        kind,
+        isDefault: false,
+        isTypeOnly: false,
+      });
     }
   }
 
@@ -289,7 +207,12 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
     regex.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = regex.exec(source)) !== null) {
-      addMatch(match, { name: match[1], kind, isDefault: false, isTypeOnly: true });
+      addMatch(match, {
+        name: match[1],
+        kind,
+        isDefault: false,
+        isTypeOnly: true,
+      });
     }
   }
 
@@ -328,7 +251,10 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
   return exports;
 }
 
-function collectExportUsage(index: ImportIndex, modulePath: string): {
+function collectExportUsage(
+  index: ImportIndex,
+  modulePath: string,
+): {
   named: Set<string>;
   defaultImport: boolean;
   namespaceImports: boolean;
@@ -354,8 +280,7 @@ function collectExportUsage(index: ImportIndex, modulePath: string): {
     }
 
     const content = index.getContent(filePath);
-    const reexportRe =
-      /export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
+    const reexportRe = /export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
     let match: RegExpExecArray | null;
     while ((match = reexportRe.exec(content)) !== null) {
       const resolved = index.resolve(filePath, match[2]);

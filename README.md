@@ -18,10 +18,10 @@ For development, press **F5** in the extension workspace (runs webpack compile v
 | **Init AI Template** | Command Palette → `Init AI Template` |
 | **Code Dashboard**   | Explorer → right-click **folder**    |
 | **Organize Imports** | Explorer → right-click **folder**    |
-| **Dead Code Scan**   | Explorer → right-click **folder**    |
+| **Code Analyze**     | Explorer → right-click **folder** · Command Palette |
 | **Code Graph**       | Explorer → right-click **file**      |
 
-Explorer commands are hidden from the Command Palette by design.
+Explorer **Organize Imports** is hidden from the Command Palette by design.
 
 ## Features
 
@@ -44,20 +44,28 @@ Organizes imports across all `ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`, and `vue` f
 
 Builds an import/dependency graph for the selected file: dependencies, dependents (import scan + Reference Provider), and external packages. Supports path aliases from `tsconfig` / `jsconfig`.
 
-### Dead Code Scan
+### Code Analyze
 
-Detects unused code in TypeScript/JavaScript/React projects:
+Static analysis for TypeScript/JavaScript/React folders:
 
+**Dead / unused code**
 - **Unused files** — no importers (entry points excluded)
 - **Orphan modules** — not reachable from entry points via the import graph
 - **Unused exports** — exported symbols with no usage
 
+**Duplicate code detector**
+- Finds duplicated blocks above `duplicateMinLines` (default 6)
+- **Exact** — same text after comment/whitespace normalization → suggest shared utility
+- **Structural** — same shape with different identifiers/literals → suggest shared helper
+
+**Large file / function detector**
+- **Large files** — non-empty LOC above `largeFileLoc` (default 300)
+- **Large functions** — body LOC above `largeFunctionLoc` (default 80) or params above `largeFunctionParams` (default 5)
+- Each hit includes a split/refactor suggestion
+
 Barrel `index.ts` files that re-export used siblings are not flagged as unused.
 
-Configure via settings:
-
-- `kyo-tools.deadCode.entryGlobs` — entry points (default: `main`, `index`, `App`, config files, Next/Vite entrypoints)
-- `kyo-tools.deadCode.excludeGlobs` — skip tests, specs, mocks
+Configure via `kyo-tools.codeAnalyze.*` settings (legacy `kyo-tools.deadCode.*` globs still read as fallback).
 
 ### Init AI Template
 
@@ -92,7 +100,7 @@ src/
     dashboard/                 # cloc stats + webview
     organize-imports/          # bulk organize imports
     code-graph/                # file dependency graph
-    dead-code/                 # unused files / exports scan
+    code-analyze/              # unused code, duplicates, large units
     init-ai-template/          # gitnexus + caveman + ponytail setup
 ```
 

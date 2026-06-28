@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { openDashboard } from "./features/dashboard";
 import { openCodeGraph } from "./features/code-graph";
-import { scanDeadCodeInFolder } from "./features/dead-code";
+import { analyzeCodeInFolder } from "./features/code-analyze";
 import { organizeImportsInFolder } from "./features/organize-imports";
 import { initAiTemplate } from "./features/init-ai-template";
 
@@ -94,11 +94,11 @@ const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
     },
   },
   {
-    id: "kyo-tools.deadCode",
-    errorTitle: "Dead code scan failed",
+    id: "kyo-tools.codeAnalyze",
+    errorTitle: "Code analyze failed",
     resolveFolderFromWorkspace: true,
     handler: async (uri) => {
-      await scanDeadCodeInFolder(uri!);
+      await analyzeCodeInFolder(uri!);
     },
   },
 ];
