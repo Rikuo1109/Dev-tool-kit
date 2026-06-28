@@ -9,6 +9,7 @@ import {
   toRelativePath,
 } from "../../shared/importGraph";
 import { isDarkTheme } from "../../shared/html";
+import { openFileInEditor } from "../../shared/openInEditor";
 import { getCodeGraphHtml } from "./panel";
 import { CodeGraphData, GraphEdge, GraphNode } from "./types";
 
@@ -332,8 +333,7 @@ export async function openCodeGraph(fileUri: vscode.Uri): Promise<void> {
 
   panel.webview.onDidReceiveMessage(async (message) => {
     if (message.type === "open" && typeof message.path === "string") {
-      const target = vscode.Uri.file(message.path);
-      await vscode.window.showTextDocument(target, { preview: true });
+      await openFileInEditor(message.path);
       return;
     }
 

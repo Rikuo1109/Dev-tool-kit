@@ -1,6 +1,7 @@
 export interface PanelTheme {
   bg: string;
   surface: string;
+  surfaceHover: string;
   border: string;
   text: string;
   muted: string;
@@ -21,6 +22,7 @@ export function getPanelTheme(isDark: boolean): PanelTheme {
     ? {
         bg: "#0f1117",
         surface: "#181b24",
+        surfaceHover: "#1f2430",
         border: "#2a3142",
         text: "#e8eaef",
         muted: "#8b93a7",
@@ -38,6 +40,7 @@ export function getPanelTheme(isDark: boolean): PanelTheme {
     : {
         bg: "#f4f6fb",
         surface: "#ffffff",
+        surfaceHover: "#f8f9fc",
         border: "#e2e6ef",
         text: "#1a1d26",
         muted: "#5c6478",

@@ -61,15 +61,24 @@ export async function organizeImportsInFolder(
         const changed = await organizeImportsInFile(file);
         if (changed) {
           updated++;
-          fileResults.push({ relativePath, status: "updated" });
+          fileResults.push({
+            relativePath,
+            absolutePath: file.fsPath,
+            status: "updated",
+          });
         } else {
           unchanged++;
-          fileResults.push({ relativePath, status: "unchanged" });
+          fileResults.push({
+            relativePath,
+            absolutePath: file.fsPath,
+            status: "unchanged",
+          });
         }
       } catch (error) {
         failed++;
         fileResults.push({
           relativePath,
+          absolutePath: file.fsPath,
           status: "failed",
           error: formatError(error),
         });

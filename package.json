@@ -77,6 +77,10 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "kyo-tools.initAiTemplate",
+          "when": "workspaceFolderCount != 0"
+        },
+        {
           "command": "code-dashboard.open",
           "when": "false"
         },
@@ -97,22 +101,22 @@
         {
           "command": "code-dashboard.open",
           "when": "explorerResourceIsFolder",
-          "group": "navigation"
-        },
-        {
-          "command": "kyo-tools.organizeImports",
-          "when": "explorerResourceIsFolder",
-          "group": "navigation"
+          "group": "2_z_kyoTools@1"
         },
         {
           "command": "kyo-tools.deadCode",
           "when": "explorerResourceIsFolder",
-          "group": "navigation"
+          "group": "2_z_kyoTools@2"
+        },
+        {
+          "command": "kyo-tools.organizeImports",
+          "when": "explorerResourceIsFolder",
+          "group": "2_z_kyoTools@3"
         },
         {
           "command": "kyo-tools.codeGraph",
           "when": "!explorerResourceIsFolder",
-          "group": "navigation"
+          "group": "2_z_kyoTools@1"
         }
       ]
     }

@@ -28,6 +28,7 @@ const DYNAMIC_IMPORT_RE = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 export interface TsConfigContext {
   baseUrl: string;
   pathAliases: Map<string, string[]>;
+  exactAliases: Map<string, string[]>;
 }
 
 export interface ParsedImport {
@@ -360,6 +361,21 @@ export function resolveImport(
     return resolved ? { type: "internal", fsPath: resolved } : null;
   }
 
+  if (!specifier.startsWith(".")) {
+    const exactTargets = tsConfig.exactAliases.get(specifier);
+    if (exactTargets) {
+      for (const targetPattern of exactTargets) {
+        const resolved = resolveFilePath(
+          tsConfig.baseUrl,
+          targetPattern.replace(/^\.\//, ""),
+        );
+        if (resolved) {
+          return { type: "internal", fsPath: resolved };
+        }
+      }
+    }
+  }
+
   for (const [prefix, targets] of tsConfig.pathAliases) {
     if (!specifier.startsWith(prefix)) {
       continue;
@@ -421,6 +437,7 @@ export function loadTsConfigForFile(
     return {
       baseUrl: path.join(workspaceRoot, "src"),
       pathAliases: new Map(),
+      exactAliases: new Map(),
     };
   }
 
@@ -435,22 +452,29 @@ export function loadTsConfigForFile(
     const baseUrlSetting = raw.compilerOptions?.baseUrl ?? ".";
     const baseUrl = path.resolve(configDir, baseUrlSetting);
     const pathAliases = new Map<string, string[]>();
+    const exactAliases = new Map<string, string[]>();
     const paths = raw.compilerOptions?.paths ?? {};
 
     for (const [key, values] of Object.entries(paths)) {
-      const prefix = key.endsWith("/*")
-        ? `${key.slice(0, -1)}/`
-        : key.endsWith("/")
-          ? key
-          : `${key}/`;
-      pathAliases.set(prefix, values);
+      if (key.endsWith("/*")) {
+        pathAliases.set(key.slice(0, -1), values);
+        continue;
+      }
+
+      if (key.includes("*")) {
+        pathAliases.set(key.replace("*", ""), values);
+        continue;
+      }
+
+      exactAliases.set(key, values);
     }
 
-    return { baseUrl, pathAliases };
+    return { baseUrl, pathAliases, exactAliases };
   } catch {
     return {
       baseUrl: path.join(workspaceRoot, "src"),
       pathAliases: new Map(),
+      exactAliases: new Map(),
     };
   }
 }

@@ -29,6 +29,13 @@ Explorer commands are hidden from the Command Palette by design.
 
 Runs `cloc --json --by-file` on a folder. Shows language stats, chart, and top/smallest files per language. Click a file to open it; **Reload** to rescan.
 
+Also reads **git history** (last 30 days, scoped to the selected folder):
+
+- **Today** — added / deleted / net line counts
+- **Chart** — daily added (green), deleted (red), and net (line) from `git log --numstat`
+
+Requires the folder to be inside a git repository.
+
 ### Organize Imports
 
 Organizes imports across all `ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`, and `vue` files in a folder. Live progress panel with Updated / Unchanged / Failed tabs.
@@ -66,7 +73,7 @@ Also writes `.cursor/skills/caveman/SKILL.md` and `.cursor/kyo-tools-ai-template
 
 ## Requirements
 
-- **Code Dashboard** — [`cloc`](https://github.com/AlDanial/cloc) on `PATH` (`brew install cloc`)
+- **Code Dashboard** — `cloc` on `PATH` (`brew install cloc`); git repo for change stats
 - **Init AI Template** — Node.js + network for `npx gitnexus`
 - **VS Code / Cursor** — `^1.105.0` (see `engines.vscode`)
 

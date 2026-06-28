@@ -1,10 +1,19 @@
 import { execFileSync } from "child_process";
 import * as vscode from "vscode";
 import { isDarkTheme } from "../../shared/html";
+import { openFileInEditor } from "../../shared/openInEditor";
 import { getDashboardHtml, parseClocData } from "./cloc";
+import { getGitChangeStats } from "./gitChanges";
+
+let activePanel: vscode.WebviewPanel | undefined;
 
 export async function openDashboard(folder: string): Promise<void> {
   const folderName = folder.split(/[/\\]/).pop() ?? folder;
+
+  if (activePanel) {
+    activePanel.reveal(vscode.ViewColumn.One);
+    return;
+  }
 
   try {
     const panel = vscode.window.createWebviewPanel(
@@ -13,6 +22,13 @@ export async function openDashboard(folder: string): Promise<void> {
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true },
     );
+
+    activePanel = panel;
+    panel.onDidDispose(() => {
+      if (activePanel === panel) {
+        activePanel = undefined;
+      }
+    });
 
     const render = async () => {
       await vscode.window.withProgress(
@@ -34,7 +50,8 @@ export async function openDashboard(folder: string): Promise<void> {
           );
 
           const raw = JSON.parse(output) as Record<string, unknown>;
-          const data = parseClocData(raw, folder, folderName);
+          const gitChanges = getGitChangeStats(folder);
+          const data = parseClocData(raw, folder, folderName, gitChanges);
 
           panel.webview.html = getDashboardHtml(data, isDarkTheme());
         },
@@ -43,8 +60,7 @@ export async function openDashboard(folder: string): Promise<void> {
 
     panel.webview.onDidReceiveMessage(async (message) => {
       if (message.type === "open" && typeof message.path === "string") {
-        const target = vscode.Uri.file(message.path);
-        await vscode.window.showTextDocument(target, { preview: true });
+        await openFileInEditor(message.path);
         return;
       }
 

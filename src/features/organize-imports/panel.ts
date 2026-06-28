@@ -1,9 +1,16 @@
 import * as vscode from "vscode";
-import { getPanelTheme } from "../../shared/theme";
 import { isDarkTheme } from "../../shared/html";
+import { openFileInEditor } from "../../shared/openInEditor";
+import {
+  panelContentStyles,
+  panelDocument,
+  renderPanelHeader,
+} from "../../shared/panel";
+import { getPanelTheme } from "../../shared/theme";
 
 export interface FileOrganizeResult {
   relativePath: string;
+  absolutePath: string;
   status: "updated" | "unchanged" | "failed";
   error?: string;
 }
@@ -32,9 +39,14 @@ export class OrganizeImportsPanel {
   ) {
     this.panel = panel;
     this.panel.webview.html = getPanelHtml(folderName, total, isDark);
-    this.panel.webview.onDidReceiveMessage((message) => {
+    this.panel.webview.onDidReceiveMessage(async (message) => {
       if (message.type === "cancel") {
         this.cancelSource.cancel();
+        return;
+      }
+
+      if (message.type === "open" && typeof message.path === "string") {
+        await openFileInEditor(message.path);
       }
     });
   }
@@ -47,7 +59,7 @@ export class OrganizeImportsPanel {
     const panel = vscode.window.createWebviewPanel(
       "kyoToolsOrganizeImports",
       `Organize Imports — ${folderName}`,
-      vscode.ViewColumn.Beside,
+      vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true },
     );
 
@@ -89,301 +101,67 @@ function getPanelHtml(
 ): string {
   const t = getPanelTheme(isDark);
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Organize Imports</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+  return panelDocument({
+    title: "Organize Imports",
+    styles: `
+      ${panelContentStyles(t)}
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: ${t.bg};
-      color: ${t.text};
-      line-height: 1.5;
-      padding: 24px;
-      min-height: 100vh;
-    }
+      .error-summary {
+        display: none;
+        background: ${t.errorSoft};
+        border: 1px solid ${t.error};
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 16px;
+      }
 
-    .header { margin-bottom: 24px; }
-    .header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
-    .header p { color: ${t.muted}; font-size: 0.9rem; margin-top: 4px; }
+      .error-summary.visible { display: block; }
 
-    .banner {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 16px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      font-size: 0.9rem;
-      font-weight: 500;
-    }
+      .error-summary h3 {
+        font-size: 0.85rem;
+        color: ${t.error};
+        margin-bottom: 10px;
+      }
 
-    .banner.running { display: flex; background: ${t.accentSoft}; color: ${t.accent}; }
-    .banner.success { display: flex; background: ${t.successSoft}; color: ${t.success}; }
-    .banner.warn { display: flex; background: ${t.warnSoft}; color: ${t.warn}; }
-    .banner.error { display: flex; background: ${t.errorSoft}; color: ${t.error}; }
+      .error-summary-item {
+        font-size: 0.8rem;
+        color: ${t.text};
+        padding: 6px 0;
+        border-top: 1px solid ${t.border};
+      }
 
-    .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid currentColor;
-      border-right-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      flex-shrink: 0;
-    }
+      .error-summary-item:first-of-type { border-top: none; }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
+      .error-summary-item strong {
+        color: ${t.error};
+        font-variant-numeric: tabular-nums;
+      }
 
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .stat {
-      background: ${t.surface};
-      border: 1px solid ${t.border};
-      border-radius: 10px;
-      padding: 14px 16px;
-      box-shadow: ${t.shadow};
-    }
-
-    .stat .label {
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: ${t.muted};
-      margin-bottom: 4px;
-    }
-
-    .stat .value {
-      font-size: 1.4rem;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .stat.updated .value { color: ${t.success}; }
-    .stat.failed .value { color: ${t.error}; }
-    .stat.progress-stat .value { color: ${t.accent}; }
-
-    .progress-section {
-      background: ${t.surface};
-      border: 1px solid ${t.border};
-      border-radius: 12px;
-      padding: 18px 20px;
-      margin-bottom: 20px;
-      box-shadow: ${t.shadow};
-    }
-
-    .progress-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      font-size: 0.85rem;
-    }
-
-    .progress-top .pct { color: ${t.muted}; font-variant-numeric: tabular-nums; }
-
-    .bar-track {
-      height: 8px;
-      background: ${t.barTrack};
-      border-radius: 99px;
-      overflow: hidden;
-      margin-bottom: 10px;
-    }
-
-    .bar-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, ${t.accent}, #818cf8);
-      border-radius: 99px;
-      transition: width 0.2s ease;
-    }
-
-    .current-file {
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 0.8rem;
-      color: ${t.muted};
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .actions { margin-bottom: 20px; }
-
-    .btn {
-      appearance: none;
-      border: 1px solid ${t.border};
-      background: ${t.surface};
-      color: ${t.text};
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-
-    .btn:hover { background: ${t.barTrack}; }
-    .btn.cancel { color: ${t.error}; border-color: ${t.errorSoft}; }
-    .btn.cancel:hover { background: ${t.errorSoft}; }
-
-    .btn.hidden { display: none; }
-
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-    }
-
-    .tab {
-      appearance: none;
-      border: 1px solid ${t.border};
-      background: ${t.surface};
-      color: ${t.muted};
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      cursor: pointer;
-    }
-
-    .tab.active {
-      background: ${t.accentSoft};
-      color: ${t.accent};
-      border-color: transparent;
-      font-weight: 600;
-    }
-
-    .file-list {
-      background: ${t.surface};
-      border: 1px solid ${t.border};
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: ${t.shadow};
-      max-height: 420px;
-      overflow-y: auto;
-    }
-
-    .file-item {
-      display: grid;
-      grid-template-columns: 72px 1fr;
-      gap: 10px;
-      padding: 10px 14px;
-      border-bottom: 1px solid ${t.border};
-      font-size: 0.82rem;
-      align-items: start;
-    }
-
-    .file-item:last-child { border-bottom: none; }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 0.68rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      white-space: nowrap;
-    }
-
-    .badge.updated { background: ${t.successSoft}; color: ${t.success}; }
-    .badge.unchanged { background: ${t.barTrack}; color: ${t.muted}; }
-    .badge.failed { background: ${t.errorSoft}; color: ${t.error}; }
-
-    .file-path {
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      word-break: break-all;
-    }
-
-    .file-error {
-      grid-column: 2;
-      color: ${t.error};
-      font-size: 0.76rem;
-      margin-top: 2px;
-    }
-
-    .empty {
-      padding: 28px;
-      text-align: center;
-      color: ${t.muted};
-      font-size: 0.9rem;
-    }
-
-    .meta {
-      margin-top: 16px;
-      font-size: 0.8rem;
-      color: ${t.muted};
-    }
-
-    .error-summary {
-      display: none;
-      background: ${t.errorSoft};
-      border: 1px solid ${t.error};
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 16px;
-    }
-
-    .error-summary.visible { display: block; }
-
-    .error-summary h3 {
-      font-size: 0.85rem;
-      color: ${t.error};
-      margin-bottom: 10px;
-    }
-
-    .error-summary-item {
-      font-size: 0.8rem;
-      color: ${t.text};
-      padding: 6px 0;
-      border-top: 1px solid ${t.border};
-    }
-
-    .error-summary-item:first-of-type { border-top: none; }
-
-    .error-summary-item strong {
-      color: ${t.error};
-      font-variant-numeric: tabular-nums;
-    }
-
-    .results { display: none; }
-    .results.visible { display: block; }
-  </style>
-</head>
-<body>
-  <header class="header">
-    <h1>Organize Imports</h1>
-    <p id="folder-name"></p>
-  </header>
+      .results { display: none; }
+      .results.visible { display: block; }
+    `,
+    body: `
+  ${renderPanelHeader("Organize Imports", '<span id="folder-name"></span>')}
 
   <div id="banner" class="banner running">
-    <span class="spinner" id="spinner"></span>
+    <span class="spinner inline" id="spinner"></span>
     <span id="banner-text">Preparing…</span>
   </div>
 
   <div class="stats">
-    <div class="stat progress-stat">
+    <div class="stat-card progress-stat">
       <div class="label">Progress</div>
       <div class="value" id="stat-progress">0 / ${total}</div>
     </div>
-    <div class="stat updated">
+    <div class="stat-card updated">
       <div class="label">Updated</div>
       <div class="value" id="stat-updated">0</div>
     </div>
-    <div class="stat">
+    <div class="stat-card">
       <div class="label">Unchanged</div>
       <div class="value" id="stat-unchanged">0</div>
     </div>
-    <div class="stat failed">
+    <div class="stat-card error">
       <div class="label">Failed</div>
       <div class="value" id="stat-failed">0</div>
     </div>
@@ -554,11 +332,21 @@ function getPanelHtml(
         const errorHtml = file.error
           ? '<div class="file-error">' + escapeHtml(file.error) + '</div>'
           : "";
-        return '<div class="file-item">' +
+        return '<button type="button" class="file-item" data-path="' +
+          encodeURIComponent(file.absolutePath) + '">' +
           '<span class="badge ' + file.status + '">' + file.status + '</span>' +
           '<div><div class="file-path">' + escapeHtml(file.relativePath) + '</div>' +
-          errorHtml + '</div></div>';
+          errorHtml + '</div></button>';
       }).join("");
+
+      list.querySelectorAll(".file-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          const path = decodeURIComponent(item.dataset.path || "");
+          if (path) {
+            vscode.postMessage({ type: "open", path });
+          }
+        });
+      });
     }
 
     function escapeHtml(text) {
@@ -569,6 +357,6 @@ function getPanelHtml(
         .replace(/"/g, "&quot;");
     }
   </script>
-</body>
-</html>`;
+    `,
+  });
 }

@@ -94,7 +94,10 @@ export async function scanDeadCodeInFolder(
           unusedExports,
           entryPoints: [...index.entryPoints]
             .filter((entry) => isPathInsideFolder(entry, folderPath))
-            .map((entry) => index.relativePath(entry)),
+            .map((entry) => ({
+              relativePath: index.relativePath(entry),
+              absolutePath: entry,
+            })),
           durationMs: Date.now() - startedAt,
         };
       },
@@ -220,6 +223,7 @@ function toExportItem(
     absolutePath: filePath,
     exportName: exp.isDefault ? "default" : exp.name,
     kind: exp.kind,
+    line: exp.line,
   };
 }
 
@@ -228,6 +232,11 @@ interface ExtractedExport {
   kind: string;
   isDefault: boolean;
   isTypeOnly: boolean;
+  line?: number;
+}
+
+function lineAt(source: string, index: number): number {
+  return source.slice(0, index).split("\n").length;
 }
 
 function extractExports(content: string, filePath: string): ExtractedExport[] {
@@ -247,6 +256,13 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
     exports.push(item);
   };
 
+  const addMatch = (
+    match: RegExpExecArray,
+    item: Omit<ExtractedExport, "line">,
+  ) => {
+    add({ ...item, line: lineAt(source, match.index) });
+  };
+
   const directPatterns: Array<[RegExp, string]> = [
     [/export\s+async\s+function\s+(\w+)/g, "function"],
     [/export\s+function\s+(\w+)/g, "function"],
@@ -261,7 +277,7 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
     regex.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = regex.exec(source)) !== null) {
-      add({ name: match[1], kind, isDefault: false, isTypeOnly: false });
+      addMatch(match, { name: match[1], kind, isDefault: false, isTypeOnly: false });
     }
   }
 
@@ -273,12 +289,19 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
     regex.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = regex.exec(source)) !== null) {
-      add({ name: match[1], kind, isDefault: false, isTypeOnly: true });
+      addMatch(match, { name: match[1], kind, isDefault: false, isTypeOnly: true });
     }
   }
 
-  if (/export\s+default/.test(source)) {
-    add({ name: "default", kind: "default", isDefault: true, isTypeOnly: false });
+  const defaultMatch = /export\s+default/m.exec(source);
+  if (defaultMatch) {
+    add({
+      name: "default",
+      kind: "default",
+      isDefault: true,
+      isTypeOnly: false,
+      line: lineAt(source, defaultMatch.index),
+    });
   }
 
   const exportListRe = /export\s+\{([^}]+)\}/g;
@@ -293,7 +316,7 @@ function extractExports(content: string, filePath: string): ExtractedExport[] {
         continue;
       }
       const alias = trimmed.split(/\s+as\s+/);
-      add({
+      addMatch(listMatch, {
         name: (alias[1] ?? alias[0]).trim(),
         kind: "named",
         isDefault: false,

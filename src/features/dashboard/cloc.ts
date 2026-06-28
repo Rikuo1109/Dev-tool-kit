@@ -23,6 +23,21 @@ export interface LangStat {
   smallestFiles: FileStat[];
 }
 
+import { GitChangeStats, formatGitChartLabels } from "./gitChanges";
+import { escapeHtml } from "../../shared/html";
+import {
+  panelBaseStyles,
+  panelDocument,
+  panelHeaderStyles,
+  panelSectionStyles,
+  panelStatCardStyles,
+  panelStatGridStyles,
+  panelToolbarBtnStyles,
+  PANEL_CSP_CDN,
+  renderPanelHeader,
+} from "../../shared/panel";
+import { getPanelTheme } from "../../shared/theme";
+
 export interface DashboardData {
   folderName: string;
   totalFiles: number;
@@ -30,6 +45,7 @@ export interface DashboardData {
   totalBlank: number;
   totalComment: number;
   languages: LangStat[];
+  gitChanges: GitChangeStats;
 }
 
 const TOP_FILES_PER_LANG = 5;
@@ -51,6 +67,7 @@ export function parseClocData(
   raw: Record<string, unknown>,
   folder: string,
   folderName: string,
+  gitChanges: GitChangeStats,
 ): DashboardData {
   const normalizedFolder = folder.replace(/\\/g, "/").replace(/\/$/, "");
   const filesByLang = new Map<string, FileStat[]>();
@@ -67,8 +84,7 @@ export function parseClocData(
       .replace(`${normalizedFolder}`, "");
 
     const file: FileStat = {
-      relativePath:
-        relativePath || (key.split(/[/\\]/).pop() ?? key),
+      relativePath: relativePath || (key.split(/[/\\]/).pop() ?? key),
       absolutePath: key.replace(/\\/g, "/"),
       code: entry.code,
       blank: entry.blank,
@@ -110,35 +126,12 @@ export function parseClocData(
     totalBlank: sum.blank,
     totalComment: sum.comment,
     languages,
+    gitChanges,
   };
 }
 
 export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
-  const theme = isDark
-    ? {
-        bg: "#0f1117",
-        surface: "#181b24",
-        surfaceHover: "#1f2430",
-        border: "#2a3142",
-        text: "#e8eaef",
-        muted: "#8b93a7",
-        accent: "#6366f1",
-        accentSoft: "rgba(99, 102, 241, 0.15)",
-        barTrack: "#252a38",
-        shadow: "0 8px 32px rgba(0,0,0,0.35)",
-      }
-    : {
-        bg: "#f4f6fb",
-        surface: "#ffffff",
-        surfaceHover: "#f8f9fc",
-        border: "#e2e6ef",
-        text: "#1a1d26",
-        muted: "#5c6478",
-        accent: "#4f46e5",
-        accentSoft: "rgba(79, 70, 229, 0.1)",
-        barTrack: "#eef1f7",
-        shadow: "0 8px 32px rgba(15, 23, 42, 0.08)",
-      };
+  const theme = getPanelTheme(isDark);
 
   const chartColors = data.languages.map(
     (_, i) => LANG_COLORS[i % LANG_COLORS.length],
@@ -220,87 +213,92 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     })
     .join("");
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src https://cdn.jsdelivr.net 'unsafe-inline';">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Code Dashboard</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+  const git = data.gitChanges;
+  const netClass = (net: number) =>
+    net > 0 ? "net-positive" : net < 0 ? "net-negative" : "net-zero";
+  const formatDelta = (value: number) =>
+    `${value >= 0 ? "+" : ""}${value.toLocaleString()}`;
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: ${theme.bg};
-      color: ${theme.text};
-      line-height: 1.5;
-      padding: 24px;
-      min-height: 100vh;
-    }
+  const gitSection = git.available
+    ? `
+  <section class="section-block">
+    <div class="stats">
+      <div class="stat-card add">
+        <div class="label">Added today</div>
+        <div class="value">+${git.today.added.toLocaleString()}</div>
+      </div>
+      <div class="stat-card delete">
+        <div class="label">Deleted today</div>
+        <div class="value">−${git.today.deleted.toLocaleString()}</div>
+      </div>
+      <div class="stat-card ${netClass(git.today.net)}">
+        <div class="label">Net today</div>
+        <div class="value">${formatDelta(git.today.net)}</div>
+      </div>
+      <div class="stat-card ${netClass(git.uncommittedNet)}">
+        <div class="label">Net uncommitted</div>
+        <div class="value">${formatDelta(git.uncommittedNet)}</div>
+      </div>
+    </div>
 
-    .header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 28px;
-    }
+    <div class="git-chart-card">
+      <div class="git-chart-wrap">
+        <canvas id="git-chart"></canvas>
+      </div>
+      <p class="git-chart-note">Committed lines from <code>git log --numstat</code> scoped to this folder. Net uncommitted = index + working tree (staged + unstaged diff).</p>
+    </div>
+  </section>`
+    : `
+  <section class="section-block">
+    <h2>Git activity</h2>
+    <div class="git-unavailable">${escapeHtml(git.message ?? "Git history unavailable")}</div>
+  </section>`;
 
-    .header-main {
-      min-width: 0;
-    }
+  const dashboardStyles = `
+    ${panelBaseStyles(theme)}
+    ${panelHeaderStyles(theme)}
+    ${panelToolbarBtnStyles(theme)}
+    ${panelStatGridStyles("140px")}
+    ${panelStatCardStyles(theme)}
+    ${panelSectionStyles(theme)}
 
-    .header h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin-bottom: 4px;
-    }
+    .header { margin-bottom: 12px; }
+    .header h1 { font-size: 1.75rem; margin-bottom: 2px; }
+    .stats { margin-bottom: 12px; }
 
-    .header p {
+    .git-unavailable {
+      background: ${theme.surface};
+      border: 1px dashed ${theme.border};
+      border-radius: 12px;
+      padding: 14px 16px;
       color: ${theme.muted};
       font-size: 0.9rem;
     }
 
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 14px;
-      margin-bottom: 28px;
-    }
-
-    .stat-card {
+    .git-chart-card {
       background: ${theme.surface};
       border: 1px solid ${theme.border};
-      border-radius: 12px;
-      padding: 16px 18px;
+      border-radius: 14px;
+      padding: 14px 16px 10px;
       box-shadow: ${theme.shadow};
     }
 
-    .stat-card .label {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
+    .git-chart-wrap {
+      position: relative;
+      height: 280px;
+    }
+
+    .git-chart-note {
+      margin-top: 10px;
+      font-size: 0.78rem;
       color: ${theme.muted};
-      margin-bottom: 6px;
-    }
-
-    .stat-card .value {
-      font-size: 1.65rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .stat-card.highlight .value {
-      color: ${theme.accent};
     }
 
     .overview {
       display: grid;
       grid-template-columns: minmax(260px, 340px) 1fr;
-      gap: 20px;
-      margin-bottom: 32px;
+      gap: 14px;
+      margin-bottom: 20px;
       align-items: start;
     }
 
@@ -312,7 +310,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       background: ${theme.surface};
       border: 1px solid ${theme.border};
       border-radius: 14px;
-      padding: 20px;
+      padding: 14px 16px;
       box-shadow: ${theme.shadow};
     }
 
@@ -321,7 +319,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: ${theme.muted};
-      margin-bottom: 16px;
+      margin-bottom: 10px;
       font-weight: 600;
     }
 
@@ -377,14 +375,14 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     .languages {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
 
     .lang-card {
       background: ${theme.surface};
       border: 1px solid ${theme.border};
       border-radius: 14px;
-      padding: 18px 20px;
+      padding: 14px 16px;
       box-shadow: ${theme.shadow};
     }
 
@@ -393,7 +391,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
     .lang-title {
@@ -432,7 +430,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       background: ${theme.barTrack};
       border-radius: 99px;
       overflow: hidden;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
     .lang-bar {
@@ -446,10 +444,10 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     .lang-stats {
       display: flex;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 12px;
       font-size: 0.85rem;
       color: ${theme.muted};
-      margin-bottom: 16px;
+      margin-bottom: 10px;
     }
 
     .lang-stats strong {
@@ -459,7 +457,7 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     .file-tables {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
+      gap: 12px;
     }
 
     .file-table-title {
@@ -557,43 +555,16 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
     .top-files th.col-other {
       text-align: right;
     }
+  `;
 
-    .muted { color: ${theme.muted}; }
+  const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
 
-    .toolbar-btn {
-      appearance: none;
-      border: 1px solid ${theme.border};
-      background: ${theme.surface};
-      color: ${theme.text};
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-size: 0.82rem;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-
-    .toolbar-btn:hover {
-      background: ${theme.surfaceHover};
-      border-color: ${theme.accent};
-      color: ${theme.accent};
-    }
-
-    .toolbar-btn:disabled {
-      opacity: 0.6;
-      cursor: wait;
-    }
-  </style>
-</head>
-<body>
-  <header class="header">
-    <div class="header-main">
-      <h1>Code Dashboard</h1>
-      <p>${escapeHtml(data.folderName)}</p>
-    </div>
-    <button type="button" class="toolbar-btn" id="reload-btn">Reload</button>
-  </header>
+  return panelDocument({
+    title: "Code Dashboard",
+    csp: PANEL_CSP_CDN,
+    styles: dashboardStyles,
+    body: `
+  ${renderPanelHeader("Code Dashboard", escapeHtml(data.folderName), reloadBtn)}
 
   <div class="stats">
     <div class="stat-card highlight">
@@ -613,6 +584,8 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
       <div class="value">${(data.totalBlank + data.totalComment).toLocaleString()}</div>
     </div>
   </div>
+
+  ${gitSection}
 
   <div class="overview">
     <div class="chart-card">
@@ -700,15 +673,87 @@ export function getDashboardHtml(data: DashboardData, isDark: boolean): string {
         }
       }
     });
-  </script>
-</body>
-</html>`;
-}
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    const gitAvailable = ${JSON.stringify(git.available)};
+    if (gitAvailable) {
+      const gitLabels = ${JSON.stringify(formatGitChartLabels(git.days))};
+      const gitAdded = ${JSON.stringify(git.days.map((d) => d.added))};
+      const gitDeleted = ${JSON.stringify(git.days.map((d) => d.deleted))};
+      const gitNet = ${JSON.stringify(git.days.map((d) => d.net))};
+      const gitText = ${JSON.stringify(theme.text)};
+      const gitMuted = ${JSON.stringify(theme.muted)};
+      const gitGrid = ${JSON.stringify(theme.border)};
+
+      new Chart(document.getElementById("git-chart"), {
+        data: {
+          labels: gitLabels,
+          datasets: [
+            {
+              type: "bar",
+              label: "Added",
+              data: gitAdded,
+              backgroundColor: "rgba(34, 197, 94, 0.75)",
+              borderRadius: 4,
+              order: 2,
+            },
+            {
+              type: "bar",
+              label: "Deleted",
+              data: gitDeleted,
+              backgroundColor: "rgba(239, 68, 68, 0.75)",
+              borderRadius: 4,
+              order: 3,
+            },
+            {
+              type: "line",
+              label: "Net",
+              data: gitNet,
+              borderColor: "#6366f1",
+              backgroundColor: "rgba(99, 102, 241, 0.12)",
+              borderWidth: 2,
+              pointRadius: 2,
+              pointHoverRadius: 4,
+              tension: 0.25,
+              yAxisID: "y",
+              order: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: gitText, boxWidth: 12, usePointStyle: true },
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const prefix = ctx.dataset.label ? ctx.dataset.label + ": " : "";
+                  const value = ctx.raw;
+                  if (ctx.dataset.label === "Net") {
+                    return " Net: " + (value >= 0 ? "+" : "") + value.toLocaleString();
+                  }
+                  return " " + prefix + value.toLocaleString();
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: gitMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+              grid: { color: gitGrid },
+            },
+            y: {
+              ticks: { color: gitMuted },
+              grid: { color: gitGrid },
+            },
+          },
+        },
+      });
+    }
+  </script>
+    `,
+  });
 }

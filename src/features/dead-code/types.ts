@@ -9,6 +9,12 @@ export interface UnusedExportItem {
   absolutePath: string;
   exportName: string;
   kind: string;
+  line?: number;
+}
+
+export interface EntryPointItem {
+  relativePath: string;
+  absolutePath: string;
 }
 
 export interface DeadCodeReport {
@@ -18,6 +24,6 @@ export interface DeadCodeReport {
   unusedFiles: DeadCodeItem[];
   orphanModules: DeadCodeItem[];
   unusedExports: UnusedExportItem[];
-  entryPoints: string[];
+  entryPoints: EntryPointItem[];
   durationMs: number;
 }

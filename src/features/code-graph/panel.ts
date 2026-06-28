@@ -1,142 +1,53 @@
+import { escapeHtml } from "../../shared/html";
+import {
+  PANEL_CSP_CDN,
+  panelCompactToolbarStyles,
+  panelDocument,
+  panelToolbarBtnStyles,
+} from "../../shared/panel";
+import { getPanelTheme, PanelTheme } from "../../shared/theme";
 import { CodeGraphData } from "./types";
 
-interface Theme {
-  bg: string;
-  surface: string;
-  border: string;
-  text: string;
-  muted: string;
-  accent: string;
-  accentSoft: string;
+interface GraphTheme extends PanelTheme {
   dep: string;
   depSoft: string;
   dependent: string;
   dependentSoft: string;
   external: string;
   externalSoft: string;
-  shadow: string;
 }
 
-function getTheme(isDark: boolean): Theme {
+function getGraphTheme(isDark: boolean): GraphTheme {
+  const base = getPanelTheme(isDark);
   return isDark
     ? {
-        bg: "#0f1117",
-        surface: "#181b24",
-        border: "#2a3142",
-        text: "#e8eaef",
-        muted: "#8b93a7",
-        accent: "#6366f1",
-        accentSoft: "rgba(99, 102, 241, 0.2)",
+        ...base,
         dep: "#06b6d4",
         depSoft: "rgba(6, 182, 212, 0.2)",
         dependent: "#22c55e",
         dependentSoft: "rgba(34, 197, 94, 0.2)",
         external: "#a855f7",
         externalSoft: "rgba(168, 85, 247, 0.2)",
-        shadow: "0 8px 32px rgba(0,0,0,0.35)",
       }
     : {
-        bg: "#f4f6fb",
-        surface: "#ffffff",
-        border: "#e2e6ef",
-        text: "#1a1d26",
-        muted: "#5c6478",
-        accent: "#4f46e5",
-        accentSoft: "rgba(79, 70, 229, 0.12)",
+        ...base,
         dep: "#0891b2",
         depSoft: "rgba(8, 145, 178, 0.12)",
         dependent: "#16a34a",
         dependentSoft: "rgba(22, 163, 74, 0.12)",
         external: "#9333ea",
         externalSoft: "rgba(147, 51, 234, 0.12)",
-        shadow: "0 8px 32px rgba(15, 23, 42, 0.08)",
       };
 }
 
-export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
-  const t = getTheme(isDark);
+function graphStyles(t: GraphTheme): string {
+  return `
+    ${panelCompactToolbarStyles(t)}
+    ${panelToolbarBtnStyles(t)}
 
-  const legend = `
-    <span class="legend-item current">Current file</span>
-    <span class="legend-item dependency">Dependencies</span>
-    <span class="legend-item dependent">Dependents</span>
-    <span class="legend-item external">External</span>
-  `;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://cdn.jsdelivr.net; script-src https://cdn.jsdelivr.net 'unsafe-inline'; img-src data:;">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Code Graph</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: ${t.bg};
-      color: ${t.text};
-      display: flex;
-      flex-direction: column;
-    }
-
-    .toolbar {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      padding: 10px 14px;
-      border-bottom: 1px solid ${t.border};
-      background: ${t.surface};
-    }
-
-    .toolbar-title {
-      min-width: 0;
-      flex: 1 1 180px;
-    }
-
-    .toolbar-title h1 {
-      font-size: 1rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .toolbar-title p {
-      color: ${t.muted};
+    .toolbar-btn {
+      padding: 6px 12px;
       font-size: 0.72rem;
-      margin-top: 2px;
-      font-family: ui-monospace, Menlo, monospace;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .toolbar-meta {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .stat {
-      font-size: 0.72rem;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid ${t.border};
-      background: ${t.bg};
-      white-space: nowrap;
-    }
-
-    .stat strong {
-      font-variant-numeric: tabular-nums;
     }
 
     .legend-item {
@@ -151,29 +62,6 @@ export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
     .legend-item.dependency { background: ${t.depSoft}; color: ${t.dep}; }
     .legend-item.dependent { background: ${t.dependentSoft}; color: ${t.dependent}; }
     .legend-item.external { background: ${t.externalSoft}; color: ${t.external}; }
-
-    .toolbar-btn {
-      appearance: none;
-      border: 1px solid ${t.border};
-      background: ${t.bg};
-      color: ${t.text};
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 0.72rem;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    .toolbar-btn:hover {
-      border-color: ${t.accent};
-      color: ${t.accent};
-    }
-
-    .toolbar-btn:disabled {
-      opacity: 0.6;
-      cursor: wait;
-    }
 
     .graph-wrap {
       flex: 1;
@@ -200,18 +88,33 @@ export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
       pointer-events: none;
       opacity: 0.9;
     }
-  </style>
-</head>
-<body>
+  `;
+}
+
+export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
+  const t = getGraphTheme(isDark);
+
+  const legend = `
+    <span class="legend-item current">Current file</span>
+    <span class="legend-item dependency">Dependencies</span>
+    <span class="legend-item dependent">Dependents</span>
+    <span class="legend-item external">External</span>
+  `;
+
+  return panelDocument({
+    title: "Code Graph",
+    csp: PANEL_CSP_CDN,
+    styles: graphStyles(t),
+    body: `
   <div class="toolbar">
     <div class="toolbar-title">
       <h1>Code Graph</h1>
       <p title="${escapeHtml(data.relativePath)}">${escapeHtml(data.relativePath)}</p>
     </div>
     <div class="toolbar-meta">
-      <span class="stat"><strong>${data.stats.dependents}</strong> in</span>
-      <span class="stat"><strong>${data.stats.dependencies}</strong> out</span>
-      <span class="stat"><strong>${data.stats.external}</strong> ext</span>
+      <span class="chip"><strong>${data.stats.dependents}</strong> in</span>
+      <span class="chip"><strong>${data.stats.dependencies}</strong> out</span>
+      <span class="chip"><strong>${data.stats.external}</strong> ext</span>
       ${legend}
       <button type="button" class="toolbar-btn" id="reload-btn">Reload</button>
     </div>
@@ -312,14 +215,6 @@ export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
       return "…" + label.slice(-27);
     }
   </script>
-</body>
-</html>`;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    `,
+  });
 }
