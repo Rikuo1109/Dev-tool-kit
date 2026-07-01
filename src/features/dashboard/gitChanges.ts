@@ -2,7 +2,7 @@ import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 
-const HISTORY_DAYS = 30;
+const HISTORY_DAYS = 120;
 const NUMSTAT_RE = /^(\d+|-)\t(\d+|-)\t/;
 
 export interface LineChangeStats {
@@ -16,6 +16,7 @@ export interface GitDayChange {
   added: number;
   deleted: number;
   net: number;
+  isMonth?: boolean;
 }
 
 export interface GitChangeStats {
@@ -93,7 +94,7 @@ export function getGitChangeStats(folder: string): GitChangeStats {
     return {
       available: false,
       message: "Not inside a git repository",
-      days: buildEmptyDays(HISTORY_DAYS),
+      days: buildMixedSeries(new Map(), 7, 90),
       today: emptyToday,
       uncommittedNet: 0,
     };
@@ -121,7 +122,7 @@ export function getGitChangeStats(folder: string): GitChangeStats {
     const uncommittedNet = getUncommittedNet(gitRoot, scope);
 
     const byDate = parseGitNumstat(output);
-    const days = buildDaySeries(byDate, HISTORY_DAYS);
+    const days = buildMixedSeries(byDate, 7, 90);
     const todayKey = localDateKey();
     const todayBucket = byDate.get(todayKey) ?? { added: 0, deleted: 0 };
 
@@ -137,7 +138,7 @@ export function getGitChangeStats(folder: string): GitChangeStats {
     return {
       available: false,
       message,
-      days: buildEmptyDays(HISTORY_DAYS),
+      days: buildMixedSeries(new Map(), 7, 90),
       today: emptyToday,
       uncommittedNet: 0,
     };
@@ -229,6 +230,60 @@ function buildEmptyDays(dayCount: number): GitDayChange[] {
   return buildDaySeries(new Map(), dayCount);
 }
 
+function buildMixedSeries(
+  byDate: Map<string, { added: number; deleted: number }>,
+  recentDays: number,
+  monthHistoryDays: number,
+): GitDayChange[] {
+  const result: GitDayChange[] = [];
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+
+  // 3 months grouped by month
+  const monthGroups = new Map<string, { added: number; deleted: number }>();
+  for (let i = monthHistoryDays - 1; i >= recentDays; i--) {
+    const date = new Date(cursor);
+    date.setDate(cursor.getDate() - i);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const monthKey = `${year}-${month}`;
+    const bucket = byDate.get(localDateKey(date)) ?? { added: 0, deleted: 0 };
+
+    const monthBucket = monthGroups.get(monthKey) ?? { added: 0, deleted: 0 };
+    monthBucket.added += bucket.added;
+    monthBucket.deleted += bucket.deleted;
+    monthGroups.set(monthKey, monthBucket);
+  }
+
+  // Add 3 months
+  for (const [monthKey, bucket] of monthGroups) {
+    result.push({
+      date: monthKey,
+      added: bucket.added,
+      deleted: bucket.deleted,
+      net: bucket.added - bucket.deleted,
+      isMonth: true,
+    });
+  }
+
+  // Add 7 recent days
+  for (let i = recentDays - 1; i >= 0; i--) {
+    const date = new Date(cursor);
+    date.setDate(cursor.getDate() - i);
+    const key = localDateKey(date);
+    const bucket = byDate.get(key) ?? { added: 0, deleted: 0 };
+
+    result.push({
+      date: key,
+      added: bucket.added,
+      deleted: bucket.deleted,
+      net: bucket.added - bucket.deleted,
+    });
+  }
+
+  return result;
+}
+
 function localDateKey(date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -242,5 +297,11 @@ function formatShortDate(isoDate: string): string {
 }
 
 export function formatGitChartLabels(days: GitDayChange[]): string[] {
-  return days.map((day) => formatShortDate(day.date));
+  return days.map((day) => {
+    if (day.isMonth) {
+      const [year, month] = day.date.split("-");
+      return `${month}/${year}`;
+    }
+    return formatShortDate(day.date);
+  });
 }

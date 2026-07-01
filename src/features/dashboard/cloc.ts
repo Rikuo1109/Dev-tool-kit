@@ -573,6 +573,7 @@ export function getDashboardHtml(
       <div class="value">${data.totalFiles.toLocaleString()}</div>
     </div>
     <div class="stat-card">
+      <div class="label">Languages</div>
       <div class="value">${data.languages.length}</div>
     </div>
     <div class="stat-card">
