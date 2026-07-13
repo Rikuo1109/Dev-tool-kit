@@ -1,6 +1,6 @@
 # kyo-tools
 
-Cursor/VS Code extension for workspace-level code tools and AI project setup.
+Cursor/VS Code extension — workspace-level code analysis, quality gates, and AI project setup.
 
 ## Install
 
@@ -9,137 +9,137 @@ yarn install
 yarn install:local   # build VSIX + install into Cursor
 ```
 
-For development, press **F5** in the extension workspace (runs webpack compile via preLaunchTask).
+Press **F5** in the extension workspace for development (runs webpack via preLaunchTask).
 
 ## Commands
 
-| Command              | How to run                                          |
-| -------------------- | --------------------------------------------------- |
-| **Init AI Template** | Command Palette → `Init AI Template`                |
-| **Code Dashboard**   | Explorer → right-click **folder**                   |
-| **Organize Imports** | Explorer → right-click **folder**                   |
-| **Code Analyze**     | Explorer → right-click **folder** · Command Palette |
-| **Pre-Merge Review** | Command Palette · Source Control title bar          |
-| **Code Graph**       | Explorer → right-click **file**                     |
-
-Explorer **Organize Imports** is hidden from the Command Palette by design.
+| Command              | Palette  | Explorer | Notes                              |
+| -------------------- | :------: | :------: | ---------------------------------- |
+| **Init AI Template** | Yes      | —        | Bootstraps GitNexus + Cursor rules |
+| **Code Dashboard**   | Yes      | Folder   | `cloc` stats + git change history  |
+| **Code Analyze**     | Yes      | Folder   | Dead code, duplicates, large units |
+| **Pre-Merge Review** | Yes      | —        | Diff-only quality gate             |
+| **Code Graph**       | Yes      | File     | Import/dependency graph for a file |
+| **Organize Imports** | —        | Folder   | Batch organize imports             |
 
 ## Features
 
 ### Code Dashboard
 
-Runs `cloc --json --by-file` on a folder (uses `git ls-files` in git repos so `.gitignore` is respected). Shows language stats, chart, and top/smallest files per language. Click a file to open it; **Reload** to rescan.
+Runs `cloc --json --by-file` on a folder (uses `git ls-files` in repos so `.gitignore` is respected). Shows language breakdown, doughnut chart, and top/smallest files per language.
 
-Also reads **git history** (last 30 days, scoped to the selected folder):
+**Git stats** (last 30 days, scoped to selected folder): daily added/deleted/net line counts from `git log --numstat`.
 
-- **Today** — added / deleted / net line counts
-- **Chart** — daily added (green), deleted (red), and net (line) from `git log --numstat`
-
-Requires the folder to be inside a git repository.
-
-### Organize Imports
-
-Organizes imports across all `ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`, and `vue` files in a folder. Live progress panel with Updated / Unchanged / Failed tabs.
-
-### Code Graph
-
-Builds an import/dependency graph for the selected file: dependencies, dependents (import scan + Reference Provider), and external packages. Supports path aliases from `tsconfig` / `jsconfig`.
+> Requires `cloc` on `PATH` (`brew install cloc`) and a git repository.
 
 ### Code Analyze
 
-Static analysis for TypeScript/JavaScript/React, **Python**, and **Java** folders. Report panel keeps the header, stats, and tabs pinned while you scroll.
+Static analysis for TypeScript/JavaScript/React, Python, and Java. Sticky header with stats and tabs — scroll the report without losing context.
 
-Supported sources: `.ts/.tsx/.js/.jsx/.vue`, `.py`, `.java`. JS/TS and Python/Java are analyzed in separate import graphs (no cross-language import edges). Files matched by `.gitignore` are skipped in git repositories.
+| Tab            | What it finds                                                           |
+| -------------- | ----------------------------------------------------------------------- |
+| Unused files   | Files with zero importers (entry points excluded)                       |
+| Orphans        | Modules not reachable from entry points                                 |
+| Exports        | Exported symbols with no usage across JS/TS, Python, Java               |
+| Duplicates     | Exact (same text) and structural (same shape) blocks above threshold    |
+| Large files    | Files exceeding `largeFileLoc` non-empty lines                          |
+| Large fns      | Functions exceeding `largeFunctionLoc` lines or `largeFunctionParams` params |
 
-**Dead / unused code**
-
-- **Unused files** — no importers (entry points excluded)
-- **Orphan modules** — not reachable from entry points via the import graph
-- **Unused exports** — exported symbols with no usage (JS/TS, Python module symbols, Java public static members)
-
-**Duplicate code detector**
-
-- Finds duplicated blocks above `duplicateMinLines` (default 6)
-- Sorted by number of locations (most copies first), then line count
-- **Exact** — same text after comment/whitespace normalization → suggest shared utility
-- **Structural** — same shape with different identifiers/literals → suggest shared helper
-- **Copy for AI** on each duplicate block — copies a refactor prompt (locations, preview, suggestion) to the clipboard
-
-**Large file / function detector**
-
-- **Large files** — non-empty LOC above `largeFileLoc` (default 300)
-- **Large functions** — body LOC above `largeFunctionLoc` (default 80) or params above `largeFunctionParams` (default 5)
-- Each hit includes a split/refactor suggestion
-
-Click rows to open files. **Reload** to rescan.
+Each duplicate group has a **Copy for AI** button — copies a refactor prompt with locations, preview, and suggestion to clipboard.
 
 Barrel `index.ts` files that re-export used siblings are not flagged as unused.
 
-**Python/Java notes:** Java resolves wildcard imports, same-package references, entry points from build files / `@SpringBootApplication`, and flags unused public static members. Python checks `__all__` or top-level public symbols against `from … import` / `import … as` usage. Dynamic imports and framework-driven Java references may still produce false positives.
+**Python/Java:** Java resolves wildcard imports, same-package refs, entry points from build files / `@SpringBootApplication`. Python checks `__all__` and `from … import` / `import … as` usage. Dynamic imports and framework-driven references may produce false positives.
 
 ### Pre-Merge Review
 
-Diff-only quality gate before merging. On run, a **branch picker** lists local and remote branches — choose one to compare with your **current branch**. Scans **added/changed lines only** on both sides since merge-base — never full-repo scan.
+Diff-only quality gate. On run, pick a branch to compare with your current branch. Scans **added/changed lines only** on both sides since merge-base.
 
-**JavaScript / TypeScript** — `console.log`, `debugger`, TODO/FIXME, commented-out code, unused imports, `any` / `@ts-ignore`, unsafe assertions, inline JSX functions, large added blocks
+**JavaScript / TypeScript**
+`console.log` · `debugger` · TODO/FIXME · commented-out code · unused imports · `any` / `@ts-ignore` · unsafe assertions · inline JSX functions · large added blocks
 
-**Python** — `print()`, TODO/FIXME, bare `except:`, `eval`/`exec`, dynamic imports, `Any` typing, inefficient loops
+**Python**
+`print()` · TODO/FIXME · bare `except:` · `eval`/`exec` · dynamic imports · `Any` typing · inefficient loops
 
-**Java** — `System.out.println`, TODO/FIXME, empty catch, raw types, reflection, performance hints
+**Java**
+`System.out.println` · TODO/FIXME · empty catch · raw types · reflection · performance hints
 
-**Dependencies** — `package.json` / lockfile changes, new heavy packages
+**Dependencies**
+`package.json` / lockfile changes · new heavy packages
 
-Report grouped by file. Click issue → jump to line. Severity: Critical / Warning / Info.
+Issues grouped by file, click to jump to line. Severity: Critical / Warning / Info.
 
-Configure via `kyo-tools.codeAnalyze.*` settings (legacy `kyo-tools.deadCode.*` globs still read as fallback).
+### Code Graph
+
+Builds an import/dependency graph for the selected file: dependencies, dependents (import scan + Reference Provider), external packages. Click nodes to expand. Supports `tsconfig` / `jsconfig` path aliases.
+
+### Organize Imports
+
+Batch organize imports across `ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`, and `vue` files in a folder. Progress panel with Updated / Unchanged / Failed tabs. Hidden from Command Palette — use the Explorer context menu.
 
 ### Init AI Template
 
 Bootstraps AI tooling for the current workspace:
 
-| Component        | What it installs                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------ |
-| **GitNexus**     | `npx gitnexus setup` (global MCP + skills) and `npx gitnexus analyze` when the workspace is a git repo |
-| **Caveman lite** | `.cursor/rules/caveman-lite.mdc` — tight responses, `alwaysApply`, lite default on new chats           |
-| **Ponytail**     | `.cursor/rules/ponytail.mdc` — YAGNI / minimal-diff mindset, `alwaysApply`                             |
+| Component        | Installs                                                                |
+| ---------------- | ----------------------------------------------------------------------- |
+| GitNexus         | `npx gitnexus setup` (MCP + skills) and `npx gitnexus analyze`          |
+| Caveman lite     | `.cursor/rules/caveman-lite.mdc` — tight response mode, `alwaysApply`   |
+| Ponytail         | `.cursor/rules/ponytail.mdc` — YAGNI / minimal-diff mindset             |
 
-Also writes `.cursor/skills/caveman/SKILL.md` and `.cursor/kyo-tools-ai-template.json`. Existing files prompt for overwrite or skip. Output goes to **Kyo Tools — Init AI Template**.
+Also writes `.cursor/skills/caveman/SKILL.md` and `.cursor/kyo-tools-ai-template.json`. Existing files prompt for overwrite or skip.
 
-## Requirements
+## Settings
 
-- **Code Dashboard** — `cloc` on `PATH` (`brew install cloc`); git repo for change stats
-- **Init AI Template** — Node.js + network for `npx gitnexus`
-- **VS Code / Cursor** — `^1.105.0` (see `engines.vscode`)
+| Setting                                | Type    | Default | Description                              |
+| -------------------------------------- | :-----: | :-----: | ---------------------------------------- |
+| `kyo-tools.codeAnalyze.entryGlobs`     | array   | (see below) | Entry point patterns excluded from unused detection |
+| `kyo-tools.codeAnalyze.excludeGlobs`   | array   | (see below) | Files excluded from analysis             |
+| `kyo-tools.codeAnalyze.duplicateMinLines` | number | 6    | Minimum non-empty lines for duplicate detection |
+| `kyo-tools.codeAnalyze.largeFileLoc`   | number  | 300     | Warn when a file exceeds this many lines |
+| `kyo-tools.codeAnalyze.largeFunctionLoc` | number | 80    | Warn when a function exceeds this many lines |
+| `kyo-tools.codeAnalyze.largeFunctionParams` | number | 5  | Warn when a function has more than this many params |
 
 ## Project layout
 
 ```
 src/
-  extension.ts                 # activate / deactivate entry
-  commands.ts                  # command definitions + registration
+  extension.ts                  # activate / deactivate entry
+  commands.ts                   # command definitions + registration
   shared/
-    constants.ts               # source globs
-    gitignore.ts               # .gitignore filtering via git
-    language.ts                # file language detection
-    theme.ts / html.ts         # shared webview helpers
-    panel.ts / openInEditor.ts
+    constants.ts                # source globs
+    gitignore.ts                # .gitignore filtering via git
+    language.ts                 # file language detection
+    resolveUri.ts               # shared workspace folder resolver
+    theme.ts                    # light/dark theme tokens
+    html.ts                     # HTML escape + dark theme detection
+    panel.ts                    # webview boilerplate (CSP, styles, helpers)
+    openInEditor.ts             # file open + webview message handler
     javascript/
-      importGraph.ts           # JS/TS import graph + multi-language index
-      barrelFiles.ts           # barrel index.ts heuristics
+      importGraph.ts            # JS/TS import graph + multi-language index
+      barrelFiles.ts            # barrel index.ts heuristics
     java/
-      graph.ts                 # Java import parsing + type index
-      entryPoints.ts           # pom/gradle/Spring Boot entries
+      graph.ts                  # Java import parsing + type index
+      entryPoints.ts            # pom/gradle/Spring Boot entries
     python/
-      graph.ts                 # Python import parsing
-      entryPoints.ts           # pyproject.toml / __main__ entries
+      graph.ts                  # Python import parsing
+      entryPoints.ts            # pyproject.toml / __main__ entries
   features/
-    dashboard/                 # cloc stats + webview
-    organize-imports/          # bulk organize imports
-    code-graph/                # file dependency graph
-    code-analyze/              # unused code, duplicates, large units
-    pre-merge-review/          # diff-only PR quality gate
-    init-ai-template/          # gitnexus + caveman + ponytail setup
+    dashboard/                  # cloc stats + git change chart
+    organize-imports/           # bulk organize imports
+    code-graph/                 # file dependency graph
+    code-analyze/               # dead code, duplicates, large units
+    pre-merge-review/           # diff-only PR quality gate
+    init-ai-template/           # gitnexus + caveman + ponytail setup
+  test/
+    extension.test.ts           # test suite placeholder
 ```
+
+## Requirements
+
+- **VS Code / Cursor** `^1.105.0`
+- **Code Dashboard** — `cloc` on `PATH` (`brew install cloc`)
+- **Init AI Template** — Node.js + network for `npx gitnexus`
 
 ## Scripts
 
@@ -148,5 +148,6 @@ src/
 | `yarn compile`       | Webpack dev build               |
 | `yarn watch`         | Webpack watch mode              |
 | `yarn lint`          | ESLint on `src/`                |
+| `yarn test`          | Run extension tests             |
 | `yarn vsix`          | Production build + package VSIX |
-| `yarn install:local` | Install VSIX into Cursor        |
+| `yarn install:local` | Build VSIX + install to Cursor  |
