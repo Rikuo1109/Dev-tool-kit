@@ -92,8 +92,10 @@ export async function buildImportIndex(
     }
   }
 
+  const gitRoot = findGitRoot(workspaceRoot) ?? workspaceRoot;
+
   const files = filterGitIgnoredPaths(
-    findGitRoot(workspaceRoot) ?? workspaceRoot,
+    gitRoot,
     uris
       .map((uri) => normalizePath(uri.fsPath))
       .filter((filePath) => !excluded.has(filePath)),
@@ -121,7 +123,7 @@ export async function buildImportIndex(
     entryGlobs,
   );
   for (const filePath of filterGitIgnoredPaths(
-    findGitRoot(workspaceRoot) ?? workspaceRoot,
+    gitRoot,
     discoverJavaEntryPoints(
       workspaceRoot,
       javaFiles,
@@ -132,7 +134,7 @@ export async function buildImportIndex(
     entryPoints.add(filePath);
   }
   for (const filePath of filterGitIgnoredPaths(
-    findGitRoot(workspaceRoot) ?? workspaceRoot,
+    gitRoot,
     discoverPythonEntryPoints(workspaceRoot),
   )) {
     entryPoints.add(normalizePath(filePath));
@@ -495,8 +497,12 @@ function resolveFilePath(fromDir: string, specifier: string): string | null {
   const base = path.resolve(fromDir, specifier);
   for (const ext of RESOLVE_EXTENSIONS) {
     const candidate = normalizePath(base + ext);
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return candidate;
+    try {
+      if (fs.statSync(candidate).isFile()) {
+        return candidate;
+      }
+    } catch {
+      // file doesn't exist or isn't accessible
     }
   }
   return null;

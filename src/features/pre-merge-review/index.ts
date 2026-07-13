@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { isDarkTheme } from "../../shared/html";
+import { resolveFolderUri } from "../../shared/resolveUri";
 import { runPreMergeReview } from "./analyze";
 import {
   getCurrentBranch,
@@ -12,7 +13,7 @@ export async function pickCompareBranch(
   gitRoot: string,
   currentBranch: string,
 ): Promise<string | undefined> {
-  const branches = listGitBranches(gitRoot, currentBranch);
+  const branches = await listGitBranches(gitRoot, currentBranch);
   if (branches.length === 0) {
     vscode.window.showWarningMessage("No other branches found to compare.");
     return undefined;
@@ -44,7 +45,7 @@ export async function openPreMergeReview(
   }
 
   const gitRoot = resolveGitRoot(folder.fsPath);
-  const currentBranch = getCurrentBranch(gitRoot);
+  const currentBranch = await getCurrentBranch(gitRoot);
   const selectedBranch =
     !forcePickBranch && compareBranch
       ? compareBranch
@@ -85,27 +86,4 @@ export async function openPreMergeReview(
     vscode.window.showErrorMessage(message);
     panel.dispose();
   }
-}
-
-async function resolveFolderUri(): Promise<vscode.Uri | undefined> {
-  const folders = vscode.workspace.workspaceFolders;
-  if (!folders?.length) {
-    vscode.window.showWarningMessage("Open a workspace folder first.");
-    return undefined;
-  }
-
-  if (folders.length === 1) {
-    return folders[0].uri;
-  }
-
-  const pick = await vscode.window.showQuickPick(
-    folders.map((folder) => ({
-      label: folder.name,
-      description: folder.uri.fsPath,
-      folder,
-    })),
-    { placeHolder: "Select workspace folder" },
-  );
-
-  return pick?.folder.uri;
 }

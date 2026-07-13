@@ -1,4 +1,4 @@
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 import * as path from "path";
 import { ReviewIssue } from "../types";
 
@@ -20,37 +20,37 @@ const HEAVY_DEPENDENCIES = new Set([
   "aws-sdk",
 ]);
 
-export function checkDependencyChanges(
+export async function checkDependencyChanges(
   gitRoot: string,
   compareBranch: string,
   currentRef: string,
-): ReviewIssue[] {
-  const mergeBase = execFileSync(
-    "git",
-    ["-C", gitRoot, "merge-base", compareBranch, currentRef],
-    { encoding: "utf-8" },
-  ).trim();
+): Promise<ReviewIssue[]> {
+  const mergeBase = (await runGit(gitRoot, [
+    "merge-base",
+    compareBranch,
+    currentRef,
+  ])).trim();
 
   const seen = new Set<string>();
   const items: ReviewIssue[] = [];
 
   for (const diffRange of [`${mergeBase}..${currentRef}`, `${mergeBase}..${compareBranch}`]) {
-    items.push(...collectDependencyIssues(gitRoot, diffRange, seen));
+    items.push(...await collectDependencyIssues(gitRoot, diffRange, seen));
   }
 
   return items;
 }
 
-function collectDependencyIssues(
+async function collectDependencyIssues(
   gitRoot: string,
   diffRange: string,
   seen: Set<string>,
-): ReviewIssue[] {
-  const names = execFileSync(
-    "git",
-    ["-C", gitRoot, "diff", "--name-only", diffRange],
-    { encoding: "utf-8" },
-  )
+): Promise<ReviewIssue[]> {
+  const names = (await runGit(gitRoot, [
+    "diff",
+    "--name-only",
+    diffRange,
+  ]))
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
@@ -63,7 +63,7 @@ function collectDependencyIssues(
     const dedupeKey = `${relativePath}:${diffRange}`;
 
     if (relativePath.endsWith("package.json")) {
-      for (const issue of checkPackageJson(
+      for (const issue of await checkPackageJson(
         relativePath,
         absolutePath,
         gitRoot,
@@ -98,18 +98,20 @@ function collectDependencyIssues(
   return items;
 }
 
-function checkPackageJson(
+async function checkPackageJson(
   relativePath: string,
   absolutePath: string,
   gitRoot: string,
   diffRange: string,
-): ReviewIssue[] {
+): Promise<ReviewIssue[]> {
   const items: ReviewIssue[] = [];
-  const patch = execFileSync(
-    "git",
-    ["-C", gitRoot, "diff", "-U0", diffRange, "--", relativePath],
-    { encoding: "utf-8" },
-  );
+  const patch = await runGit(gitRoot, [
+    "diff",
+    "-U0",
+    diffRange,
+    "--",
+    relativePath,
+  ]);
 
   const addedDeps = [...patch.matchAll(/^\+\s*"([^"]+)":/gm)]
     .map((match) => match[1])
@@ -140,4 +142,19 @@ function checkPackageJson(
   }
 
   return items;
+}
+
+function runGit(gitRoot: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile("git", ["-C", gitRoot, ...args], {
+      encoding: "utf-8",
+      maxBuffer: 64 * 1024 * 1024,
+    }, (error, stdout) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
 }

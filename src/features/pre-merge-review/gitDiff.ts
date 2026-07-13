@@ -1,4 +1,4 @@
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { findGitRoot } from "../../shared/gitignore";
@@ -13,19 +13,19 @@ export function resolveGitRoot(folderPath: string): string {
   return root;
 }
 
-export function getCurrentBranch(gitRoot: string): string {
-  const branch = runGit(gitRoot, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+export async function getCurrentBranch(gitRoot: string): Promise<string> {
+  const branch = (await runGit(gitRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
   if (branch === "HEAD") {
     throw new Error("Detached HEAD — checkout a branch before running pre-merge review.");
   }
   return branch;
 }
 
-export function listGitBranches(
+export async function listGitBranches(
   gitRoot: string,
   currentBranch: string,
-): string[] {
-  const output = runGit(gitRoot, [
+): Promise<string[]> {
+  const output = await runGit(gitRoot, [
     "for-each-ref",
     "--format=%(refname:short)",
     "refs/heads/",
@@ -57,26 +57,26 @@ export function listGitBranches(
   return [...preferred.filter((branch) => branches.has(branch)), ...rest];
 }
 
-export function collectBranchComparisonDiffs(
+export async function collectBranchComparisonDiffs(
   gitRoot: string,
   compareBranch: string,
   currentRef = "HEAD",
-): FileDiff[] {
-  const mergeBase = runGit(gitRoot, [
+): Promise<FileDiff[]> {
+  const mergeBase = (await runGit(gitRoot, [
     "merge-base",
     compareBranch,
     currentRef,
-  ]).trim();
+  ])).trim();
 
   const byFile = new Map<string, FileDiff>();
 
-  ingestRangeDiffs(
+  await ingestRangeDiffs(
     byFile,
     gitRoot,
     `${mergeBase}..${currentRef}`,
     currentRef,
   );
-  ingestRangeDiffs(
+  await ingestRangeDiffs(
     byFile,
     gitRoot,
     `${mergeBase}..${compareBranch}`,
@@ -88,13 +88,13 @@ export function collectBranchComparisonDiffs(
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
-function ingestRangeDiffs(
+async function ingestRangeDiffs(
   byFile: Map<string, FileDiff>,
   gitRoot: string,
   diffRange: string,
   contentRef: string,
-): void {
-  const names = runGit(gitRoot, ["diff", "--name-only", diffRange])
+): Promise<void> {
+  const names = (await runGit(gitRoot, ["diff", "--name-only", diffRange]))
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
@@ -105,7 +105,7 @@ function ingestRangeDiffs(
       continue;
     }
 
-    const patch = runGit(gitRoot, ["diff", "-U0", diffRange, "--", relativePath]);
+    const patch = await runGit(gitRoot, ["diff", "-U0", diffRange, "--", relativePath]);
     const addedLines = parseAddedLines(patch);
     if (addedLines.length === 0) {
       continue;
@@ -131,18 +131,18 @@ function ingestRangeDiffs(
   }
 }
 
-export function readFileAtRef(
+export async function readFileAtRef(
   gitRoot: string,
   relativePath: string,
   contentRef: string,
-): string {
+): Promise<string> {
   const absolutePath = path.join(gitRoot, relativePath);
   if (contentRef === "HEAD" && fs.existsSync(absolutePath)) {
     return fs.readFileSync(absolutePath, "utf-8");
   }
 
   try {
-    return runGit(gitRoot, ["show", `${contentRef}:${relativePath}`]);
+    return await runGit(gitRoot, ["show", `${contentRef}:${relativePath}`]);
   } catch {
     if (fs.existsSync(absolutePath)) {
       return fs.readFileSync(absolutePath, "utf-8");
@@ -183,10 +183,18 @@ function parseAddedLines(patch: string): AddedLine[] {
   return added;
 }
 
-function runGit(gitRoot: string, args: string[]): string {
-  return execFileSync("git", ["-C", gitRoot, ...args], {
-    encoding: "utf-8",
-    maxBuffer: 64 * 1024 * 1024,
+function runGit(gitRoot: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile("git", ["-C", gitRoot, ...args], {
+      encoding: "utf-8",
+      maxBuffer: 64 * 1024 * 1024,
+    }, (error, stdout) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(stdout);
+      }
+    });
   });
 }
 

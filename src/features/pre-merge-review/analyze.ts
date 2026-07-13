@@ -25,15 +25,15 @@ const CHECKERS: Record<SourceLanguage, FileChecker | undefined> = {
   unknown: undefined,
 };
 
-export function runPreMergeReview(
+export async function runPreMergeReview(
   folderPath: string,
   compareBranch: string,
-): PreMergeReviewReport {
+): Promise<PreMergeReviewReport> {
   const startedAt = Date.now();
   const gitRoot = resolveGitRoot(folderPath);
-  const currentBranch = getCurrentBranch(gitRoot);
+  const currentBranch = await getCurrentBranch(gitRoot);
 
-  const fileDiffs = collectBranchComparisonDiffs(
+  const fileDiffs = await collectBranchComparisonDiffs(
     gitRoot,
     compareBranch,
     "HEAD",
@@ -41,10 +41,10 @@ export function runPreMergeReview(
   const issues: ReviewIssue[] = [];
 
   for (const diff of fileDiffs) {
-    issues.push(...analyzeFileDiff(gitRoot, diff));
+    issues.push(...await analyzeFileDiff(gitRoot, diff));
   }
 
-  issues.push(...checkDependencyChanges(gitRoot, compareBranch, "HEAD"));
+  issues.push(...await checkDependencyChanges(gitRoot, compareBranch, "HEAD"));
 
   return {
     currentBranch,
@@ -56,14 +56,14 @@ export function runPreMergeReview(
   };
 }
 
-function analyzeFileDiff(gitRoot: string, diff: FileDiff): ReviewIssue[] {
+async function analyzeFileDiff(gitRoot: string, diff: FileDiff): Promise<ReviewIssue[]> {
   const checker = CHECKERS[diff.language];
   if (!checker) {
     return [];
   }
 
   const fileContent =
-    readFileAtRef(gitRoot, diff.relativePath, diff.contentRef) ||
+    (await readFileAtRef(gitRoot, diff.relativePath, diff.contentRef)) ||
     (fs.existsSync(diff.absolutePath)
       ? fs.readFileSync(diff.absolutePath, "utf-8")
       : "");

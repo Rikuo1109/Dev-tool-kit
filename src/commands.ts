@@ -5,6 +5,7 @@ import { analyzeCodeInFolder } from "./features/code-analyze";
 import { openPreMergeReview } from "./features/pre-merge-review";
 import { organizeImportsInFolder } from "./features/organize-imports";
 import { initAiTemplate } from "./features/init-ai-template";
+import { resolveFolderUri } from "./shared/resolveUri";
 
 interface CommandDefinition {
   id: string;
@@ -13,33 +14,6 @@ interface CommandDefinition {
   resolveFolderFromWorkspace?: boolean;
   resolveFileFromEditor?: boolean;
   handler: (uri?: vscode.Uri) => Promise<void>;
-}
-
-async function resolveFolderUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
-  if (uri) {
-    return uri;
-  }
-
-  const folders = vscode.workspace.workspaceFolders;
-  if (!folders?.length) {
-    vscode.window.showWarningMessage("Open a workspace folder first.");
-    return undefined;
-  }
-
-  if (folders.length === 1) {
-    return folders[0].uri;
-  }
-
-  const pick = await vscode.window.showQuickPick(
-    folders.map((folder) => ({
-      label: folder.name,
-      description: folder.uri.fsPath,
-      folder,
-    })),
-    { placeHolder: "Select workspace folder" },
-  );
-
-  return pick?.folder.uri;
 }
 
 async function resolveFileUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
