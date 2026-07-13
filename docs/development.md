@@ -44,7 +44,7 @@ src/
       graph.ts                  # Python import parsing
       entryPoints.ts            # pyproject.toml / __main__ entries
   features/
-    dashboard/                  # cloc stats + git change chart
+    dashboard/                  # file count stats + git change chart
     organize-imports/           # bulk organize imports
     code-graph/                 # file dependency graph (vis.js)
     code-analyze/               # dead code, duplicates, large units

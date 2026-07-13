@@ -27,7 +27,7 @@ Dependency graph for a single file. Shows dependencies, dependents, and external
 
 ### Code Dashboard
 
-Language stats via `cloc`, file size chart, and git change history (last 30 days).
+Language stats, file size chart, and git change history (last 30 days).
 
 ### Organize Imports
 
@@ -40,7 +40,6 @@ Sets up GitNexus (MCP server + skills) and Cursor rules (caveman lite, ponytail)
 ## Requirements
 
 - Cursor / VS Code `^1.105.0`
-- `cloc` on PATH for Code Dashboard (`brew install cloc`)
 - Node.js + internet for Init AI Template
 
 ## Settings
