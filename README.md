@@ -1,82 +1,59 @@
 # Kyo Tools
 
-Bộ công cụ toàn diện cho Cursor & VS Code — phân tích code, review chất lượng, và thiết lập AI workspace ngay trong editor.
+Code analysis and quality tools for Cursor & VS Code.
 
-## Tính năng
+## Features
 
-### Phân tích Code
+### Code Analyze
 
-Quét toàn bộ thư mục để tìm vấn đề tiềm ẩn. Hỗ trợ **TypeScript, JavaScript, React, Python, Java**.
+Scans a folder for code issues. Supports TypeScript, JavaScript, React, Python, and Java.
 
-- **Code chết** — file không được import, module mồ côi, export không dùng đến
-- **Code trùng lặp** — phát hiện block giống hệt (exact) hoặc cùng cấu trúc (structural), kèm gợi ý tách shared module
-- **File / function quá lớn** — cảnh báo khi vượt ngưỡng LOC hoặc tham số, kèm đề xuất refactor
-- **Copy cho AI** — mỗi block trùng lặp có nút copy prompt refactor để paste thẳng vào chat AI
+- **Unused code** — files with no importers, orphan modules, unused exports
+- **Duplicates** — exact and structural duplicate code blocks with suggestions
+- **Large files/functions** — warns when files or functions exceed configurable thresholds
+- **Copy for AI** — each duplicate block has a button to copy a refactor prompt for AI chat
 
-Cấu hình ngưỡng qua `kyo-tools.codeAnalyze.*` settings.
+Thresholds are configurable via `kyo-tools.codeAnalyze.*` settings.
 
 ### Pre-Merge Review
 
-Quality gate trước khi merge. Chọn branch để so sánh với branch hiện tại — chỉ quét **dòng thêm/sửa** từ merge-base, không quét toàn bộ repo.
+Diff-only quality check before merging. Pick a branch to compare against — only scans added/changed lines since merge-base.
 
-| Ngôn ngữ      | Cảnh báo                                                                 |
-| ------------- | ------------------------------------------------------------------------ |
-| JS/TS/React   | `console.log`, `debugger`, TODO/FIXME, code bị comment, import thừa, `any`, `@ts-ignore`, unsafe assertion, inline JSX function |
-| Python        | `print()`, bare `except:`, `eval`/`exec`, dynamic import, `Any` typing   |
-| Java          | `System.out.println`, empty catch, raw type, reflection                  |
-| Chung         | Hardcoded secret, dependency mới, lockfile thay đổi                      |
-
-Issue phân loại theo **Critical / Warning / Info**, click để jump tới dòng code.
+Checks for `console.log`, `debugger`, `any` usage, commented-out code, unused imports, bare excepts, hardcoded secrets, new dependencies, and more across JS/TS, Python, and Java. Issues are grouped by file with click-to-jump. Severity: Critical, Warning, or Info.
 
 ### Code Graph
 
-Xây dựng đồ thị phụ thuộc cho một file: danh sách dependency, danh sách file phụ thuộc ngược (import scan + Reference Provider), và các package bên ngoài. Hỗ trợ path alias từ `tsconfig` / `jsconfig`. Click node để mở rộng.
+Dependency graph for a single file. Shows dependencies, dependents, and external packages. Supports `tsconfig`/`jsconfig` path aliases.
 
 ### Code Dashboard
 
-Thống kê code theo ngôn ngữ bằng `cloc`, biểu đồ phân bổ, top file lớn nhất / nhỏ nhất. Kèm **git stats** 30 ngày gần nhất: số dòng thêm, xóa, net theo ngày, scope theo thư mục được chọn.
+Language stats via `cloc`, file size chart, and git change history (last 30 days).
 
 ### Organize Imports
 
-Sắp xếp import hàng loạt cho tất cả file `ts`, `tsx`, `js`, `jsx`, `mjs`, `cjs`, `vue` trong thư mục. Panel tiến trình với tab Updated / Unchanged / Failed.
+Batch organize imports across `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue` files. Progress panel with results tabs.
 
 ### Init AI Template
 
-Khởi tạo AI tooling cho workspace chỉ với một lệnh:
+Sets up GitNexus (MCP server + skills) and Cursor rules (caveman lite, ponytail) in one command.
 
-| Thành phần      | Cài đặt                                                             |
-| --------------- | ------------------------------------------------------------------- |
-| **GitNexus**    | MCP server + skills, tự động index codebase                         |
-| **Caveman lite**| Rule Cursor cho phản hồi ngắn gọn, `alwaysApply`                    |
-| **Ponytail**    | Rule Cursor YAGNI / minimal-diff, `alwaysApply`                     |
+## Requirements
 
-File có sẵn sẽ hỏi trước khi ghi đè.
-
-## Yêu cầu
-
-- **Cursor / VS Code** `^1.105.0`
-- **Code Dashboard** cần `cloc` (`brew install cloc`)
-- **Init AI Template** cần Node.js + mạng
-
-## Cài đặt
-
-Tải từ [VS Code Marketplace](#) hoặc cài thủ công:
-
-```bash
-yarn install:local
-```
+- Cursor / VS Code `^1.105.0`
+- `cloc` on PATH for Code Dashboard (`brew install cloc`)
+- Node.js + internet for Init AI Template
 
 ## Settings
 
-| Setting                                   | Mặc định | Mô tả                                    |
-| ----------------------------------------- | :------: | ---------------------------------------- |
-| `kyo-tools.codeAnalyze.duplicateMinLines` | 6        | Số dòng tối thiểu để phát hiện code trùng |
-| `kyo-tools.codeAnalyze.largeFileLoc`      | 300      | Cảnh báo khi file vượt quá số dòng này   |
-| `kyo-tools.codeAnalyze.largeFunctionLoc`  | 80       | Cảnh báo khi function vượt quá số dòng này |
-| `kyo-tools.codeAnalyze.largeFunctionParams` | 5      | Cảnh báo khi function có nhiều hơn số tham số này |
+| Setting | Default | Description |
+| --- | :---: | --- |
+| `kyo-tools.codeAnalyze.duplicateMinLines` | 6 | Min lines for duplicate detection |
+| `kyo-tools.codeAnalyze.largeFileLoc` | 300 | Warn above this file line count |
+| `kyo-tools.codeAnalyze.largeFunctionLoc` | 80 | Warn above this function line count |
+| `kyo-tools.codeAnalyze.largeFunctionParams` | 5 | Warn above this param count |
 
-Xem đầy đủ settings trong `kyo-tools.codeAnalyze.*`.
+See `kyo-tools.codeAnalyze.*` in VS Code settings for entry/exclude globs and more.
 
-## Phát triển
+## Development
 
-Xem [docs/development.md](docs/development.md).
+See [docs/development.md](docs/development.md).
