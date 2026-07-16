@@ -9,7 +9,7 @@ import {
 import { isDarkTheme } from "../../shared/html";
 import { openFileInEditor } from "../../shared/openInEditor";
 import { getDashboardHtml, parseClocData } from "./cloc";
-import { getGitChangeStats } from "./gitChanges";
+import { getAggregatedGitChangeStats } from "./gitChanges";
 
 let activePanel: vscode.WebviewPanel | undefined;
 
@@ -204,8 +204,15 @@ export async function openDashboard(
         },
         async () => {
           const raw = countFilesInDir(folder);
-          const gitChanges = getGitChangeStats(folder);
-          const data = parseClocData(raw, folder, folderName, gitChanges);
+          const { stats: gitChanges, subrepoCount } =
+            getAggregatedGitChangeStats(folder);
+          const data = parseClocData(
+            raw,
+            folder,
+            folderName,
+            gitChanges,
+            subrepoCount,
+          );
 
           const chartScriptUri = panel.webview.asWebviewUri(
             vscode.Uri.joinPath(extensionUri, "media", "chart.umd.min.js"),

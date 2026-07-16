@@ -4,6 +4,10 @@
   "description": "Code dashboard, organize imports, code graph, code analyze, and AI template init",
   "version": "0.0.1",
   "publisher": "kyoriku",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rikuo1109/Dev-tool-kit.git"
+  },
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -141,13 +145,6 @@
         {
           "command": "kyo-tools.preMergeReview",
           "when": "workspaceFolderCount != 0"
-        }
-      ],
-      "scm/title": [
-        {
-          "command": "kyo-tools.preMergeReview",
-          "when": "scmProvider == git && workspaceFolderCount != 0",
-          "group": "navigation@99"
         }
       ],
       "explorer/context": [

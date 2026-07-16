@@ -4,6 +4,7 @@ import * as path from "path";
 
 const HISTORY_DAYS = 120;
 const NUMSTAT_RE = /^(\d+|-)\t(\d+|-)\t/;
+const EXCLUDE_DIRS = new Set(["node_modules", "dist", "build", ".git"]);
 
 export interface LineChangeStats {
   added: number;
@@ -143,6 +144,101 @@ export function getGitChangeStats(folder: string): GitChangeStats {
       uncommittedNet: 0,
     };
   }
+}
+
+export function findSubrepos(folder: string): string[] {
+  const result: string[] = [];
+  const resolved = path.resolve(folder);
+
+  function walk(dir: string, depth: number) {
+    if (depth > 3) {
+      return;
+    }
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      if (entry.name.startsWith(".") || EXCLUDE_DIRS.has(entry.name)) {
+        continue;
+      }
+
+      const fullPath = path.join(dir, entry.name);
+      const gitPath = path.join(fullPath, ".git");
+
+      if (fs.existsSync(gitPath)) {
+        result.push(fullPath);
+        continue;
+      }
+
+      walk(fullPath, depth + 1);
+    }
+  }
+
+  walk(resolved, 0);
+  return result;
+}
+
+export function getAggregatedGitChangeStats(folder: string): {
+  stats: GitChangeStats;
+  subrepoCount: number;
+} {
+  const mainStats = getGitChangeStats(folder);
+  const subrepos = findSubrepos(folder);
+
+  if (subrepos.length === 0) {
+    return { stats: mainStats, subrepoCount: 0 };
+  }
+
+  const allStats = [mainStats];
+  for (const subrepo of subrepos) {
+    allStats.push(getGitChangeStats(subrepo));
+  }
+
+  const anyAvailable = allStats.some((s) => s.available);
+
+  const mergedByDate = new Map<string, { added: number; deleted: number }>();
+  let todayAdded = 0;
+  let todayDeleted = 0;
+  let totalUncommitted = 0;
+
+  for (const stats of allStats) {
+    if (!stats.available) {
+      continue;
+    }
+
+    const todayKey = localDateKey();
+    for (const day of stats.days) {
+      const bucket = mergedByDate.get(day.date) ?? { added: 0, deleted: 0 };
+      bucket.added += day.added;
+      bucket.deleted += day.deleted;
+      mergedByDate.set(day.date, bucket);
+    }
+
+    todayAdded += stats.today.added;
+    todayDeleted += stats.today.deleted;
+    totalUncommitted += stats.uncommittedNet;
+  }
+
+  const days = buildMixedSeries(mergedByDate, 7, 90);
+
+  return {
+    stats: {
+      available: anyAvailable,
+      message: anyAvailable ? undefined : "No git history available",
+      days,
+      today: toLineStats(todayAdded, todayDeleted),
+      uncommittedNet: totalUncommitted,
+    },
+    subrepoCount: subrepos.length,
+  };
 }
 
 function findGitRoot(start: string): string | null {

@@ -41,6 +41,7 @@ export interface DashboardData {
   totalComment: number;
   languages: LangStat[];
   gitChanges: GitChangeStats;
+  subrepoCount: number;
 }
 
 const TOP_FILES_PER_LANG = 5;
@@ -63,6 +64,7 @@ export function parseClocData(
   folder: string,
   folderName: string,
   gitChanges: GitChangeStats,
+  subrepoCount = 0,
 ): DashboardData {
   const normalizedFolder = folder.replace(/\\/g, "/").replace(/\/$/, "");
   const filesByLang = new Map<string, FileStat[]>();
@@ -122,6 +124,7 @@ export function parseClocData(
     totalComment: sum.comment,
     languages,
     gitChanges,
+    subrepoCount,
   };
 }
 
@@ -223,6 +226,14 @@ export function getDashboardHtml(
   const formatDelta = (value: number) =>
     `${value >= 0 ? "+" : ""}${value.toLocaleString()}`;
 
+  const subrepoCard =
+    data.subrepoCount > 0
+      ? `<div class="stat-card subrepo">
+        <div class="label">Subrepos</div>
+        <div class="value">${data.subrepoCount}</div>
+      </div>`
+      : "";
+
   const gitSection = git.available
     ? `
   <section class="section-block">
@@ -249,7 +260,7 @@ export function getDashboardHtml(
       <div class="git-chart-wrap">
         <canvas id="git-chart"></canvas>
       </div>
-      <p class="git-chart-note">Committed lines from <code>git log --numstat</code> scoped to this folder. Net uncommitted = index + working tree (staged + unstaged diff).</p>
+      <p class="git-chart-note">Committed lines from <code>git log --numstat</code> scoped to this folder. Net uncommitted = index + working tree (staged + unstaged diff).${data.subrepoCount > 0 ? ` Includes ${data.subrepoCount} subrepo(s).` : ""}</p>
     </div>
   </section>`
     : `
@@ -580,6 +591,7 @@ export function getDashboardHtml(
       <div class="label">Blank + comment</div>
       <div class="value">${(data.totalBlank + data.totalComment).toLocaleString()}</div>
     </div>
+    ${subrepoCard}
   </div>
 
   ${gitSection}
