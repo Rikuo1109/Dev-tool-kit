@@ -24,6 +24,7 @@ export interface LangStat {
 }
 
 import { GitChangeStats, formatGitChartLabels } from "./gitChanges";
+import { TodoItem } from "./todos";
 import { escapeHtml } from "../../shared/html";
 import {
   panelContentStyles,
@@ -42,6 +43,8 @@ export interface DashboardData {
   languages: LangStat[];
   gitChanges: GitChangeStats;
   subrepoCount: number;
+  todos: TodoItem[];
+  todoTotal: number;
 }
 
 const TOP_FILES_PER_LANG = 5;
@@ -65,6 +68,8 @@ export function parseClocData(
   folderName: string,
   gitChanges: GitChangeStats,
   subrepoCount = 0,
+  todos: TodoItem[] = [],
+  todoTotal = 0,
 ): DashboardData {
   const normalizedFolder = folder.replace(/\\/g, "/").replace(/\/$/, "");
   const filesByLang = new Map<string, FileStat[]>();
@@ -125,6 +130,8 @@ export function parseClocData(
     languages,
     gitChanges,
     subrepoCount,
+    todos,
+    todoTotal,
   };
 }
 
@@ -234,6 +241,87 @@ export function getDashboardHtml(
       </div>`
       : "";
 
+  const todoCard = `<div class="stat-card">
+      <div class="label">TODOs</div>
+      <div class="value">${data.todoTotal.toLocaleString()}</div>
+    </div>`;
+
+  const todoSection =
+    data.todos.length > 0
+      ? `
+  <section class="section-block">
+    <div class="todo-card">
+      <h2 class="section-title">Open TODOs${
+        data.todoTotal > data.todos.length
+          ? ` <span class="todo-cap">(showing ${data.todos.length} of ${data.todoTotal})</span>`
+          : ""
+      }</h2>
+      <table class="top-files todo-files">
+        <thead>
+          <tr>
+            <th class="col-tag">Tag</th>
+            <th>File</th>
+            <th>Preview</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.todos
+            .map(
+              (todo) => `
+          <tr>
+            <td class="col-tag"><span class="todo-tag todo-tag-${todo.tag.toLowerCase()}">${todo.tag}</span></td>
+            <td class="file-path">
+              <button type="button" class="file-link" data-path="${escapeHtml(todo.absolutePath)}" data-line="${todo.line}" title="${escapeHtml(todo.relativePath)}:${todo.line}">${escapeHtml(todo.relativePath)}:${todo.line}</button>
+            </td>
+            <td class="todo-preview" title="${escapeHtml(todo.text)}">${escapeHtml(todo.text)}</td>
+          </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  </section>`
+      : `
+  <section class="section-block">
+    <div class="todo-empty">No TODO/FIXME comments found.</div>
+  </section>`;
+
+  const uncommittedFiles = git.uncommittedFiles ?? [];
+  const uncommittedTable =
+    uncommittedFiles.length > 0
+      ? `
+    <div class="uncommitted-card">
+      <h3 class="uncommitted-title">Uncommitted files</h3>
+      <table class="top-files uncommitted-files">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th class="col-code">+</th>
+            <th class="col-other">−</th>
+            <th class="col-other">Net</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${uncommittedFiles
+            .map(
+              (file) => `
+          <tr>
+            <td class="file-path">
+              <button type="button" class="file-link" data-path="${escapeHtml(file.absolutePath)}" title="${escapeHtml(file.relativePath)}">${escapeHtml(file.relativePath)}</button>
+            </td>
+            <td class="num col-code add-num">+${file.added.toLocaleString()}</td>
+            <td class="num col-other delete-num">−${file.deleted.toLocaleString()}</td>
+            <td class="num col-other ${netClass(file.net)}">${formatDelta(file.net)}</td>
+          </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>`
+      : git.uncommittedNet === 0
+        ? `<div class="uncommitted-empty">Working tree clean — no staged or unstaged line changes.</div>`
+        : "";
+
   const gitSection = git.available
     ? `
   <section class="section-block">
@@ -255,6 +343,8 @@ export function getDashboardHtml(
         <div class="value">${formatDelta(git.uncommittedNet)}</div>
       </div>
     </div>
+
+    ${uncommittedTable}
 
     <div class="git-chart-card">
       <div class="git-chart-wrap">
@@ -299,6 +389,108 @@ export function getDashboardHtml(
       font-size: 0.65rem;
       color: ${theme.muted};
       line-height: 1.4;
+    }
+
+    .uncommitted-card {
+      background: ${theme.surface};
+      border: 1px solid ${theme.border};
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: ${theme.shadow};
+      margin-bottom: 10px;
+    }
+
+    .uncommitted-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: ${theme.muted};
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .uncommitted-files .add-num {
+      color: #22c55e;
+    }
+
+    .uncommitted-files .delete-num {
+      color: #ef4444;
+    }
+
+    .uncommitted-files .net-positive {
+      color: #22c55e;
+    }
+
+    .uncommitted-files .net-negative {
+      color: #ef4444;
+    }
+
+    .uncommitted-empty {
+      background: ${theme.surface};
+      border: 1px dashed ${theme.border};
+      border-radius: 10px;
+      padding: 8px 10px;
+      color: ${theme.muted};
+      font-size: 0.72rem;
+      margin-bottom: 10px;
+    }
+
+    .todo-card {
+      background: ${theme.surface};
+      border: 1px solid ${theme.border};
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: ${theme.shadow};
+    }
+
+    .todo-cap {
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      color: ${theme.muted};
+    }
+
+    .todo-tag {
+      display: inline-block;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .todo-tag-todo {
+      background: rgba(245, 158, 11, 0.18);
+      color: #f59e0b;
+    }
+
+    .todo-tag-fixme {
+      background: rgba(239, 68, 68, 0.18);
+      color: #ef4444;
+    }
+
+    .col-tag {
+      width: 56px;
+      white-space: nowrap;
+    }
+
+    .todo-preview {
+      max-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: ${theme.muted};
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.68rem;
+    }
+
+    .todo-empty {
+      background: ${theme.surface};
+      border: 1px dashed ${theme.border};
+      border-radius: 10px;
+      padding: 8px 10px;
+      color: ${theme.muted};
+      font-size: 0.72rem;
     }
 
     .overview {
@@ -591,10 +783,13 @@ export function getDashboardHtml(
       <div class="label">Blank + comment</div>
       <div class="value">${(data.totalBlank + data.totalComment).toLocaleString()}</div>
     </div>
+    ${todoCard}
     ${subrepoCard}
   </div>
 
   ${gitSection}
+
+  ${todoSection}
 
   <div class="overview">
     <div class="chart-card">
@@ -635,7 +830,13 @@ export function getDashboardHtml(
       el.addEventListener("click", () => {
         const path = el.getAttribute("data-path");
         if (path) {
-          vscode.postMessage({ type: "open", path });
+          const lineAttr = el.getAttribute("data-line");
+          const line = lineAttr ? Number.parseInt(lineAttr, 10) : 0;
+          vscode.postMessage({
+            type: "open",
+            path,
+            line: Number.isFinite(line) ? line : 0,
+          });
         }
       });
     });

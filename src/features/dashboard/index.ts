@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "fs";
-import { extname, join } from "path";
+import { extname, join, relative } from "path";
 import * as vscode from "vscode";
 import {
   isGitRepository,
@@ -10,6 +10,13 @@ import { isDarkTheme } from "../../shared/html";
 import { openFileInEditor } from "../../shared/openInEditor";
 import { getDashboardHtml, parseClocData } from "./cloc";
 import { getAggregatedGitChangeStats } from "./gitChanges";
+import { rankTodos, scanTodosInContent, TodoItem } from "./todos";
+
+interface FolderScanResult {
+  raw: Record<string, unknown>;
+  todos: TodoItem[];
+  todoTotal: number;
+}
 
 let activePanel: vscode.WebviewPanel | undefined;
 
@@ -55,13 +62,15 @@ function countCodeLines(content: string): {
 function countFilesInDir(
   dirPath: string,
   excludeDirs = new Set(["node_modules", "dist", "build", ".git"]),
-): Record<string, unknown> {
+): FolderScanResult {
   const result: Record<string, unknown> = {};
+  const foundTodos: TodoItem[] = [];
   let totalFiles = 0;
   let totalCode = 0;
   let totalBlank = 0;
   let totalComment = 0;
 
+  const resolvedRoot = dirPath.replace(/\\/g, "/").replace(/\/$/, "");
   const isGit = isGitRepository(dirPath);
   const gitRoot = isGit ? findGitRoot(dirPath) : null;
   const filesToCheck: string[] = [];
@@ -138,6 +147,10 @@ function countFilesInDir(
       const lang = langMap[ext] || ext.slice(1).toUpperCase() || "Unknown";
       const content = readFileSync(fullPath, "utf-8");
       const counts = countCodeLines(content);
+      const relativePath =
+        relative(resolvedRoot, fullPath).replace(/\\/g, "/") ||
+        fullPath.split(/[/\\]/).pop() ||
+        fullPath;
 
       result[fullPath] = {
         blank: counts.blank,
@@ -145,6 +158,10 @@ function countFilesInDir(
         code: counts.code,
         language: lang,
       };
+
+      foundTodos.push(
+        ...scanTodosInContent(content, fullPath, relativePath),
+      );
 
       totalFiles++;
       totalCode += counts.code;
@@ -162,7 +179,12 @@ function countFilesInDir(
     comment: totalComment,
   };
 
-  return result;
+  const ranked = rankTodos(foundTodos);
+  return {
+    raw: result,
+    todos: ranked.todos,
+    todoTotal: ranked.todoTotal,
+  };
 }
 
 export async function openDashboard(
@@ -203,15 +225,17 @@ export async function openDashboard(
           cancellable: false,
         },
         async () => {
-          const raw = countFilesInDir(folder);
+          const scan = countFilesInDir(folder);
           const { stats: gitChanges, subrepoCount } =
             getAggregatedGitChangeStats(folder);
           const data = parseClocData(
-            raw,
+            scan.raw,
             folder,
             folderName,
             gitChanges,
             subrepoCount,
+            scan.todos,
+            scan.todoTotal,
           );
 
           const chartScriptUri = panel.webview.asWebviewUri(
@@ -228,7 +252,11 @@ export async function openDashboard(
 
     panel.webview.onDidReceiveMessage(async (message) => {
       if (message.type === "open" && typeof message.path === "string") {
-        await openFileInEditor(message.path);
+        const line =
+          typeof message.line === "number" && message.line > 0
+            ? message.line
+            : 0;
+        await openFileInEditor(message.path, line);
         return;
       }
 

@@ -3,6 +3,8 @@ import * as fs from "fs";
 import * as path from "path";
 
 const HISTORY_DAYS = 120;
+const RECENT_DAYS = 7;
+const MONTH_COLUMNS = 3;
 const NUMSTAT_RE = /^(\d+|-)\t(\d+|-)\t/;
 const EXCLUDE_DIRS = new Set(["node_modules", "dist", "build", ".git"]);
 
@@ -20,6 +22,14 @@ export interface GitDayChange {
   isMonth?: boolean;
 }
 
+export interface UncommittedFile {
+  relativePath: string;
+  absolutePath: string;
+  added: number;
+  deleted: number;
+  net: number;
+}
+
 export interface GitChangeStats {
   available: boolean;
   message?: string;
@@ -27,7 +37,26 @@ export interface GitChangeStats {
   today: LineChangeStats;
   /** Net line delta from staged (index) + unstaged (working tree) changes. */
   uncommittedNet: number;
+  /** Files contributing to uncommittedNet, largest churn first. */
+  uncommittedFiles: UncommittedFile[];
 }
+
+interface DailyBucket {
+  added: number;
+  deleted: number;
+}
+
+interface GitDailyStats {
+  available: boolean;
+  message?: string;
+  byDate: Map<string, DailyBucket>;
+  today: LineChangeStats;
+  uncommittedNet: number;
+  uncommittedFiles: UncommittedFile[];
+}
+
+const UNCOMMITTED_FILE_LIMIT = 20;
+const NUMSTAT_FILE_RE = /^(\d+|-)\t(\d+|-)\t(.+)$/;
 
 function emptyLineStats(): LineChangeStats {
   return { added: 0, deleted: 0, net: 0 };
@@ -48,9 +77,13 @@ function runGit(gitRoot: string, args: string[]): string {
   });
 }
 
-function parseNumstatOutput(output: string): { added: number; deleted: number } {
-  let added = 0;
-  let deleted = 0;
+function mergeNumstatIntoFiles(
+  output: string,
+  gitRoot: string,
+  displayRoot: string,
+  into: Map<string, UncommittedFile>,
+): void {
+  const normalizedRoot = path.resolve(displayRoot);
 
   for (const rawLine of output.split("\n")) {
     const line = rawLine.trimEnd();
@@ -58,52 +91,122 @@ function parseNumstatOutput(output: string): { added: number; deleted: number } 
       continue;
     }
 
-    const match = line.match(NUMSTAT_RE);
-    if (!match) {
+    const match = line.match(NUMSTAT_FILE_RE);
+    if (!match || match[1] === "-" || match[2] === "-") {
       continue;
     }
 
-    added += match[1] === "-" ? 0 : Number.parseInt(match[1], 10);
-    deleted += match[2] === "-" ? 0 : Number.parseInt(match[2], 10);
+    const added = Number.parseInt(match[1], 10);
+    const deleted = Number.parseInt(match[2], 10);
+    if (Number.isNaN(added) || Number.isNaN(deleted) || (added === 0 && deleted === 0)) {
+      continue;
+    }
+
+    const absolutePath = path
+      .resolve(gitRoot, match[3])
+      .replace(/\\/g, "/");
+    const relativePath =
+      path.relative(normalizedRoot, absolutePath).replace(/\\/g, "/") ||
+      path.basename(absolutePath);
+
+    const existing = into.get(absolutePath);
+    if (existing) {
+      existing.added += added;
+      existing.deleted += deleted;
+      existing.net = existing.added - existing.deleted;
+    } else {
+      into.set(absolutePath, {
+        relativePath,
+        absolutePath,
+        added,
+        deleted,
+        net: added - deleted,
+      });
+    }
   }
-
-  return { added, deleted };
 }
 
-function getUncommittedNet(gitRoot: string, scope: string): number {
+function getUncommittedChanges(
+  gitRoot: string,
+  scope: string,
+  displayRoot: string,
+): { net: number; files: UncommittedFile[] } {
   const pathArgs = scopeArgs(scope);
-  const unstaged = parseNumstatOutput(
+  const byFile = new Map<string, UncommittedFile>();
+
+  mergeNumstatIntoFiles(
     runGit(gitRoot, ["diff", "--numstat", "--no-renames", ...pathArgs]),
+    gitRoot,
+    displayRoot,
+    byFile,
   );
-  const staged = parseNumstatOutput(
-    runGit(gitRoot, ["diff", "--cached", "--numstat", "--no-renames", ...pathArgs]),
+  mergeNumstatIntoFiles(
+    runGit(gitRoot, [
+      "diff",
+      "--cached",
+      "--numstat",
+      "--no-renames",
+      ...pathArgs,
+    ]),
+    gitRoot,
+    displayRoot,
+    byFile,
   );
 
-  return (
-    unstaged.added +
-    staged.added -
-    unstaged.deleted -
-    staged.deleted
+  const files = [...byFile.values()].sort(
+    (a, b) =>
+      b.added + b.deleted - (a.added + a.deleted) ||
+      a.relativePath.localeCompare(b.relativePath),
   );
+
+  const net = files.reduce((sum, file) => sum + file.net, 0);
+  return { net, files };
 }
 
-export function getGitChangeStats(folder: string): GitChangeStats {
+function rankUncommittedFiles(files: UncommittedFile[]): UncommittedFile[] {
+  return [...files]
+    .sort(
+      (a, b) =>
+        b.added + b.deleted - (a.added + a.deleted) ||
+        a.relativePath.localeCompare(b.relativePath),
+    )
+    .slice(0, UNCOMMITTED_FILE_LIMIT);
+}
+
+function mergeUncommittedFiles(
+  into: Map<string, UncommittedFile>,
+  from: UncommittedFile[],
+): void {
+  for (const file of from) {
+    const existing = into.get(file.absolutePath);
+    if (existing) {
+      existing.added += file.added;
+      existing.deleted += file.deleted;
+      existing.net = existing.added - existing.deleted;
+    } else {
+      into.set(file.absolutePath, { ...file });
+    }
+  }
+}
+
+function collectGitDailyStats(folder: string): GitDailyStats {
   const emptyToday = emptyLineStats();
+  const emptyByDate = new Map<string, DailyBucket>();
 
   const gitRoot = findGitRoot(folder);
   if (!gitRoot) {
     return {
       available: false,
       message: "Not inside a git repository",
-      days: buildMixedSeries(new Map(), 7, 90),
+      byDate: emptyByDate,
       today: emptyToday,
       uncommittedNet: 0,
+      uncommittedFiles: [],
     };
   }
 
-  const scope = path
-    .relative(gitRoot, path.resolve(folder))
-    .replace(/\\/g, "/");
+  const resolvedFolder = path.resolve(folder);
+  const scope = path.relative(gitRoot, resolvedFolder).replace(/\\/g, "/");
 
   try {
     const args = [
@@ -119,19 +222,17 @@ export function getGitChangeStats(folder: string): GitChangeStats {
       args.push("--", scope);
     }
 
-    const output = runGit(gitRoot, args);
-    const uncommittedNet = getUncommittedNet(gitRoot, scope);
-
-    const byDate = parseGitNumstat(output);
-    const days = buildMixedSeries(byDate, 7, 90);
+    const byDate = parseGitNumstat(runGit(gitRoot, args));
     const todayKey = localDateKey();
     const todayBucket = byDate.get(todayKey) ?? { added: 0, deleted: 0 };
+    const uncommitted = getUncommittedChanges(gitRoot, scope, resolvedFolder);
 
     return {
       available: true,
-      days,
+      byDate,
       today: toLineStats(todayBucket.added, todayBucket.deleted),
-      uncommittedNet,
+      uncommittedNet: uncommitted.net,
+      uncommittedFiles: uncommitted.files,
     };
   } catch (error) {
     const message =
@@ -139,11 +240,27 @@ export function getGitChangeStats(folder: string): GitChangeStats {
     return {
       available: false,
       message,
-      days: buildMixedSeries(new Map(), 7, 90),
+      byDate: emptyByDate,
       today: emptyToday,
       uncommittedNet: 0,
+      uncommittedFiles: [],
     };
   }
+}
+
+function toChangeStats(daily: GitDailyStats): GitChangeStats {
+  return {
+    available: daily.available,
+    message: daily.message,
+    days: buildMixedSeries(daily.byDate),
+    today: daily.today,
+    uncommittedNet: daily.uncommittedNet,
+    uncommittedFiles: rankUncommittedFiles(daily.uncommittedFiles),
+  };
+}
+
+export function getGitChangeStats(folder: string): GitChangeStats {
+  return toChangeStats(collectGitDailyStats(folder));
 }
 
 export function findSubrepos(folder: string): string[] {
@@ -186,56 +303,71 @@ export function findSubrepos(folder: string): string[] {
   return result;
 }
 
+function mergeDailyBuckets(
+  into: Map<string, DailyBucket>,
+  from: Map<string, DailyBucket>,
+): void {
+  for (const [date, bucket] of from) {
+    const merged = into.get(date) ?? { added: 0, deleted: 0 };
+    merged.added += bucket.added;
+    merged.deleted += bucket.deleted;
+    into.set(date, merged);
+  }
+}
+
 export function getAggregatedGitChangeStats(folder: string): {
   stats: GitChangeStats;
   subrepoCount: number;
 } {
-  const mainStats = getGitChangeStats(folder);
+  const displayRoot = path.resolve(folder);
+  const main = collectGitDailyStats(folder);
   const subrepos = findSubrepos(folder);
 
   if (subrepos.length === 0) {
-    return { stats: mainStats, subrepoCount: 0 };
+    return { stats: toChangeStats(main), subrepoCount: 0 };
   }
 
-  const allStats = [mainStats];
+  const mergedByDate = new Map<string, DailyBucket>();
+  mergeDailyBuckets(mergedByDate, main.byDate);
+
+  const mergedFiles = new Map<string, UncommittedFile>();
+  if (main.available) {
+    mergeUncommittedFiles(mergedFiles, main.uncommittedFiles);
+  }
+
+  let todayAdded = main.available ? main.today.added : 0;
+  let todayDeleted = main.available ? main.today.deleted : 0;
+  let totalUncommitted = main.available ? main.uncommittedNet : 0;
+  let anyAvailable = main.available;
+
   for (const subrepo of subrepos) {
-    allStats.push(getGitChangeStats(subrepo));
-  }
-
-  const anyAvailable = allStats.some((s) => s.available);
-
-  const mergedByDate = new Map<string, { added: number; deleted: number }>();
-  let todayAdded = 0;
-  let todayDeleted = 0;
-  let totalUncommitted = 0;
-
-  for (const stats of allStats) {
-    if (!stats.available) {
+    const daily = collectGitDailyStats(subrepo);
+    if (!daily.available) {
       continue;
     }
-
-    const todayKey = localDateKey();
-    for (const day of stats.days) {
-      const bucket = mergedByDate.get(day.date) ?? { added: 0, deleted: 0 };
-      bucket.added += day.added;
-      bucket.deleted += day.deleted;
-      mergedByDate.set(day.date, bucket);
-    }
-
-    todayAdded += stats.today.added;
-    todayDeleted += stats.today.deleted;
-    totalUncommitted += stats.uncommittedNet;
+    anyAvailable = true;
+    mergeDailyBuckets(mergedByDate, daily.byDate);
+    // Re-resolve paths relative to parent folder for display
+    const remapped = daily.uncommittedFiles.map((file) => ({
+      ...file,
+      relativePath:
+        path.relative(displayRoot, file.absolutePath).replace(/\\/g, "/") ||
+        file.relativePath,
+    }));
+    mergeUncommittedFiles(mergedFiles, remapped);
+    todayAdded += daily.today.added;
+    todayDeleted += daily.today.deleted;
+    totalUncommitted += daily.uncommittedNet;
   }
-
-  const days = buildMixedSeries(mergedByDate, 7, 90);
 
   return {
     stats: {
       available: anyAvailable,
       message: anyAvailable ? undefined : "No git history available",
-      days,
+      days: buildMixedSeries(mergedByDate),
       today: toLineStats(todayAdded, todayDeleted),
       uncommittedNet: totalUncommitted,
+      uncommittedFiles: rankUncommittedFiles([...mergedFiles.values()]),
     },
     subrepoCount: subrepos.length,
   };
@@ -256,10 +388,8 @@ function findGitRoot(start: string): string | null {
   }
 }
 
-function parseGitNumstat(
-  output: string,
-): Map<string, { added: number; deleted: number }> {
-  const byDate = new Map<string, { added: number; deleted: number }>();
+function parseGitNumstat(output: string): Map<string, DailyBucket> {
+  const byDate = new Map<string, DailyBucket>();
   let currentDate: string | null = null;
 
   for (const rawLine of output.split("\n")) {
@@ -297,73 +427,56 @@ function parseGitNumstat(
   return byDate;
 }
 
-function buildDaySeries(
-  byDate: Map<string, { added: number; deleted: number }>,
-  dayCount: number,
-): GitDayChange[] {
-  const days: GitDayChange[] = [];
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-
-  for (let i = dayCount - 1; i >= 0; i--) {
-    const date = new Date(cursor);
-    date.setDate(cursor.getDate() - i);
-    const key = localDateKey(date);
-    const bucket = byDate.get(key) ?? { added: 0, deleted: 0 };
-
-    days.push({
-      date: key,
-      added: bucket.added,
-      deleted: bucket.deleted,
-      net: bucket.added - bucket.deleted,
-    });
-  }
-
-  return days;
-}
-
-function buildEmptyDays(dayCount: number): GitDayChange[] {
-  return buildDaySeries(new Map(), dayCount);
-}
-
+/** Exactly 3 calendar months (oldest→newest), then 7 days. Month totals skip the recent-day window so the same lines aren't counted twice. */
 function buildMixedSeries(
-  byDate: Map<string, { added: number; deleted: number }>,
-  recentDays: number,
-  monthHistoryDays: number,
+  byDate: Map<string, DailyBucket>,
+  now = new Date(),
 ): GitDayChange[] {
   const result: GitDayChange[] = [];
-  const cursor = new Date();
+  const cursor = new Date(now);
   cursor.setHours(0, 0, 0, 0);
 
-  // 3 months grouped by month
-  const monthGroups = new Map<string, { added: number; deleted: number }>();
-  for (let i = monthHistoryDays - 1; i >= recentDays; i--) {
-    const date = new Date(cursor);
-    date.setDate(cursor.getDate() - i);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const monthKey = `${year}-${month}`;
-    const bucket = byDate.get(localDateKey(date)) ?? { added: 0, deleted: 0 };
+  const recentStart = new Date(cursor);
+  recentStart.setDate(cursor.getDate() - (RECENT_DAYS - 1));
+  const recentStartKey = localDateKey(recentStart);
 
-    const monthBucket = monthGroups.get(monthKey) ?? { added: 0, deleted: 0 };
-    monthBucket.added += bucket.added;
-    monthBucket.deleted += bucket.deleted;
-    monthGroups.set(monthKey, monthBucket);
-  }
+  for (let offset = MONTH_COLUMNS - 1; offset >= 0; offset--) {
+    const monthDate = new Date(
+      cursor.getFullYear(),
+      cursor.getMonth() - offset,
+      1,
+    );
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
 
-  // Add 3 months
-  for (const [monthKey, bucket] of monthGroups) {
+    let added = 0;
+    let deleted = 0;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = `${monthKey}-${String(day).padStart(2, "0")}`;
+      if (key >= recentStartKey) {
+        continue;
+      }
+      const bucket = byDate.get(key);
+      if (!bucket) {
+        continue;
+      }
+      added += bucket.added;
+      deleted += bucket.deleted;
+    }
+
     result.push({
       date: monthKey,
-      added: bucket.added,
-      deleted: bucket.deleted,
-      net: bucket.added - bucket.deleted,
+      added,
+      deleted,
+      net: added - deleted,
       isMonth: true,
     });
   }
 
-  // Add 7 recent days
-  for (let i = recentDays - 1; i >= 0; i--) {
+  for (let i = RECENT_DAYS - 1; i >= 0; i--) {
     const date = new Date(cursor);
     date.setDate(cursor.getDate() - i);
     const key = localDateKey(date);
@@ -400,4 +513,44 @@ export function formatGitChartLabels(days: GitDayChange[]): string[] {
     }
     return formatShortDate(day.date);
   });
+}
+
+/** ponytail: runnable checks. Ceiling: fixtures only, no real git. */
+export function selfCheckBuildMixedSeries(): void {
+  const byDate = new Map<string, DailyBucket>([
+    ["2026-05-01", { added: 100, deleted: 0 }],
+    ["2026-07-01", { added: 50, deleted: 0 }],
+    ["2026-07-16", { added: 10, deleted: 0 }],
+  ]);
+  const series = buildMixedSeries(byDate, new Date(2026, 6, 16));
+  const may = series.find((d) => d.date === "2026-05");
+  const julyMonth = series.find((d) => d.date === "2026-07" && d.isMonth);
+  const today = series.find((d) => d.date === "2026-07-16");
+  if (may?.added !== 100) {
+    throw new Error("May month should keep daily totals");
+  }
+  if ((julyMonth?.added ?? 0) !== 50) {
+    throw new Error("July month should exclude recent-day window");
+  }
+  if (today?.added !== 10) {
+    throw new Error("Today stays in day column");
+  }
+  if (series.filter((d) => d.isMonth).length !== 3) {
+    throw new Error("exactly 3 months");
+  }
+
+  const files = new Map<string, UncommittedFile>();
+  mergeNumstatIntoFiles(
+    "10\t2\tsrc/a.ts\n-\t-\tbin.dat\n3\t1\tsrc/a.ts\n",
+    "/repo",
+    "/repo",
+    files,
+  );
+  const a = files.get("/repo/src/a.ts");
+  if (!a || a.added !== 13 || a.deleted !== 3 || a.net !== 10) {
+    throw new Error("staged+unstaged numstat should merge per file");
+  }
+  if (files.size !== 1) {
+    throw new Error("binary numstat rows should be skipped");
+  }
 }

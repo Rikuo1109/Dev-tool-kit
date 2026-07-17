@@ -1,7 +1,7 @@
 {
   "name": "kyo-tools",
   "displayName": "kyo-tools",
-  "description": "Code dashboard, organize imports, code graph, code analyze, and AI template init",
+  "description": "Code dashboard, dead code explorer, organize imports, code graph, code analyze, and AI template init",
   "version": "0.0.1",
   "publisher": "kyoriku",
   "repository": {
@@ -40,6 +40,11 @@
       {
         "command": "kyo-tools.codeAnalyze",
         "title": "Code Analyze",
+        "category": "Kyo Tools"
+      },
+      {
+        "command": "kyo-tools.deadCodeExplorer",
+        "title": "Dead Code Explorer",
         "category": "Kyo Tools"
       },
       {
@@ -143,6 +148,10 @@
           "when": "workspaceFolderCount != 0"
         },
         {
+          "command": "kyo-tools.deadCodeExplorer",
+          "when": "workspaceFolderCount != 0"
+        },
+        {
           "command": "kyo-tools.preMergeReview",
           "when": "workspaceFolderCount != 0"
         }
@@ -159,9 +168,14 @@
           "group": "2_z_kyoTools@2"
         },
         {
-          "command": "kyo-tools.organizeImports",
+          "command": "kyo-tools.deadCodeExplorer",
           "when": "explorerResourceIsFolder",
           "group": "2_z_kyoTools@3"
+        },
+        {
+          "command": "kyo-tools.organizeImports",
+          "when": "explorerResourceIsFolder",
+          "group": "2_z_kyoTools@4"
         },
         {
           "command": "kyo-tools.codeGraph",
