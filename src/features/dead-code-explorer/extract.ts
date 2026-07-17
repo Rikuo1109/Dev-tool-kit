@@ -12,7 +12,7 @@ const ROUTE_SKIP_NAMES = new Set([
 ]);
 
 const PATH_REF_RE =
-  /(?:href|to)\s*=\s*["'`]([^"'`#?]+)["'`]|router\.(?:push|replace)\(\s*["'`]([^"'`#?]+)["'`]|redirect\(\s*["'`]([^"'`#?]+)["'`]|["'`](\/[A-Za-z0-9_\-./[\]]*)["'`]/g;
+  /(?:href|to)\s*=\s*["'`]([^"'`#?]+)["'`]|path\s*:\s*["'`]([^"'`#?]+)["'`]|router\.(?:push|replace)\(\s*["'`]([^"'`#?]+)["'`]|redirect\(\s*["'`]([^"'`#?]+)["'`]|["'`](\/[A-Za-z0-9_\-./[\]]*)["'`]/g;
 
 const API_HANDLER_RE =
   /(?:app|router|server)\s*\.\s*(?:get|post|put|patch|delete|all|use)\s*\(\s*["'`]([^"'`]+)["'`]|@(?:app|router)\.(?:get|post|put|patch|delete|options|head)\s*\(\s*["'`]([^"'`]+)["'`]/gi;
@@ -113,7 +113,7 @@ export function extractPathRefs(content: string): Set<string> {
   PATH_REF_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = PATH_REF_RE.exec(content)) !== null) {
-    const raw = match[1] ?? match[2] ?? match[3] ?? match[4];
+    const raw = match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5];
     if (!raw || !raw.startsWith("/")) {
       continue;
     }

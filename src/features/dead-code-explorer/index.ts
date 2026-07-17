@@ -1,9 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import {
-  findOrphanModules,
   findUnusedExports,
-  findUnusedFiles,
   getAnalyzeConfig,
 } from "../code-analyze/deadCode";
 import { UnusedExportItem } from "../code-analyze/types";
@@ -13,6 +11,10 @@ import {
   normalizePath,
 } from "../../shared/javascript/importGraph";
 import { isDarkTheme } from "../../shared/html";
+import { buildAssetGraph } from "./assetGraph";
+import { classifyDeadFiles } from "./classifyFiles";
+import { getDeadCodeExplorerConfig } from "./config";
+import { discoverBundlerEntries } from "./entryDiscovery";
 import {
   findDeadApis,
   findDeadCss,
@@ -20,8 +22,6 @@ import {
 } from "./heuristics";
 import { DeadCodeExplorerPanel } from "./panel";
 import { DeadCodeReport, DeadItem } from "./types";
-
-export type { DeadCodeReport, DeadItem } from "./types";
 
 const CLASS_KINDS = new Set(["class"]);
 const FUNCTION_KINDS = new Set(["function", "named", "default", "method"]);
@@ -34,6 +34,11 @@ function toDeadItem(item: UnusedExportItem): DeadItem {
     name: item.exportName,
     detail: item.kind,
     line: item.line,
+    bucket: "dead",
+    confidence: "medium",
+    reason: "export_unused",
+    falsePositiveHint:
+      "Export may be used via dynamic import or re-export aliases.",
   };
 }
 
@@ -70,7 +75,8 @@ export async function openDeadCodeExplorer(
 
   const folderPath = normalizePath(folderUri.fsPath);
   const folderName = path.basename(folderPath);
-  const config = getAnalyzeConfig();
+  const analyzeConfig = getAnalyzeConfig();
+  const explorerConfig = getDeadCodeExplorerConfig();
   const isDark = isDarkTheme();
   const panel =
     existingPanel ?? DeadCodeExplorerPanel.open(folderName, isDark);
@@ -89,46 +95,60 @@ export async function openDeadCodeExplorer(
         cancellable: false,
       },
       async (progress) => {
+        progress.report({ message: "Discovering entries…" });
+        const entryGlobs = [
+          ...analyzeConfig.entryGlobs,
+          ...explorerConfig.entryGlobs,
+        ];
+        const discovered = explorerConfig.discoverBundlerEntries
+          ? await discoverBundlerEntries(
+              workspaceFolder,
+              workspaceFolder.uri.fsPath,
+              explorerConfig.entryGlobs,
+            )
+          : { entries: [] as string[], labels: new Map<string, string>() };
+
         progress.report({ message: "Building import graph…" });
         const index = await buildImportIndex(
           workspaceFolder,
-          config.entryGlobs,
-          config.excludeGlobs,
+          entryGlobs,
+          analyzeConfig.excludeGlobs,
         );
+
+        // Merge discovered bundler entries into index entry set for reachability
+        for (const entry of discovered.entries) {
+          index.entryPoints.add(entry);
+          if (!discovered.labels.has(entry)) {
+            discovered.labels.set(entry, "discovered entry");
+          }
+        }
 
         const scopedFiles = index.files.filter((file) =>
           isPathInsideFolder(file, folderPath),
         );
 
-        progress.report({ message: "Finding unused files & exports…" });
-        const unusedFiles = findUnusedFiles(scopedFiles, index);
-        const orphanModules = findOrphanModules(scopedFiles, index);
+        progress.report({ message: "Building runtime asset graph…" });
+        const assetGraph = await buildAssetGraph(
+          workspaceFolder,
+          workspaceFolder.uri.fsPath,
+          index,
+        );
+
+        progress.report({ message: "Classifying files…" });
+        const classified = classifyDeadFiles({
+          scopedFiles,
+          index,
+          config: explorerConfig,
+          discoveredEntries: discovered.entries,
+          entryLabels: discovered.labels,
+          assetGraph,
+          primaryBuckets: explorerConfig.primaryBuckets,
+        });
+
+        progress.report({ message: "Finding unused exports…" });
         const unusedExports = findUnusedExports(scopedFiles, index);
         const { deadClasses, deadFunctions, deadConstants } =
           groupExports(unusedExports);
-
-        const deadFiles: DeadItem[] = [
-          ...unusedFiles.map((item) => ({
-            relativePath: item.relativePath,
-            absolutePath: item.absolutePath,
-            detail: item.detail ?? "No imports found in workspace",
-          })),
-          ...orphanModules.map((item) => ({
-            relativePath: item.relativePath,
-            absolutePath: item.absolutePath,
-            detail: item.detail ?? "Not reachable from entry points",
-          })),
-        ];
-
-        // Dedupe by path, keep first detail
-        const seenFiles = new Set<string>();
-        const dedupedFiles = deadFiles.filter((item) => {
-          if (seenFiles.has(item.absolutePath)) {
-            return false;
-          }
-          seenFiles.add(item.absolutePath);
-          return true;
-        });
 
         progress.report({ message: "Scanning routes, APIs, CSS…" });
         const [deadRoutes, deadApis, deadCss] = await Promise.all([
@@ -141,15 +161,18 @@ export async function openDeadCodeExplorer(
           folderName,
           folderPath,
           scannedFiles: scopedFiles.length,
-          deadFiles: dedupedFiles.sort((a, b) =>
-            a.relativePath.localeCompare(b.relativePath),
-          ),
+          deadFiles: classified.primary,
+          allDeadFiles: classified.all,
+          filesSummary: classified.summary,
           deadClasses,
           deadFunctions,
           deadConstants,
           deadRoutes,
           deadApis,
           deadCss,
+          discoveredEntries: discovered.entries.map((abs) =>
+            index.relativePath(abs),
+          ),
           durationMs: Date.now() - startedAt,
         } satisfies DeadCodeReport;
       },

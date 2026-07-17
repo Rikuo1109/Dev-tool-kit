@@ -17,17 +17,6 @@ import {
 } from "./extract";
 import { DeadItem } from "./types";
 
-export {
-  extractApiHandlers,
-  extractClientApiRefs,
-  extractCssClasses,
-  extractPathRefs,
-  fileToApiPath,
-  fileToRoutePath,
-  pathReferenced,
-  selfCheckDeadHeuristics,
-} from "./extract";
-
 export async function findDeadRoutes(
   folderPath: string,
   index: ImportIndex,
@@ -147,10 +136,22 @@ export async function findDeadCss(
     EXCLUDE_GLOB,
   );
 
-  const sourceCorpus = index.files
-    .filter((filePath) => !/\.(css|scss)$/i.test(filePath))
+  const sourceFiles = index.files.filter(
+    (filePath) => !/\.(css|scss)$/i.test(filePath),
+  );
+  const sourceCorpus = sourceFiles
     .map((filePath) => index.getContent(filePath))
     .join("\n");
+
+  // Stylesheet import graph: if A imports B's CSS, treat B as composing into A
+  const usedStylesheets = new Set<string>();
+  for (const filePath of index.files) {
+    for (const dep of index.getDependencies(filePath)) {
+      if (/\.(css|scss)$/i.test(dep)) {
+        usedStylesheets.add(dep);
+      }
+    }
+  }
 
   const items: DeadItem[] = [];
 
@@ -159,6 +160,16 @@ export async function findDeadCss(
     if (!isPathInsideFolder(absolutePath, folderPath)) {
       continue;
     }
+
+    const relativePath = path
+      .relative(index.workspaceRoot, absolutePath)
+      .replace(/\\/g, "/");
+
+    // Never flag vendor CSS under public/
+    if (relativePath.startsWith("public/")) {
+      continue;
+    }
+
     let content: string;
     try {
       content = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString(
@@ -168,24 +179,41 @@ export async function findDeadCss(
       continue;
     }
 
-    const relativePath = path
-      .relative(index.workspaceRoot, absolutePath)
-      .replace(/\\/g, "/");
+    const isModule = /\.module\.(css|scss)$/i.test(relativePath);
+    const pairedSources = isModule
+      ? findPairedModuleSources(absolutePath, index)
+      : [];
 
     for (const cls of extractCssClasses(content)) {
-      // ponytail: ceiling — CSS modules / dynamic classNames false-positive; upgrade: css-module export map
+      if (isModule && cssModuleClassUsed(cls.name, pairedSources, index)) {
+        continue;
+      }
+
       const re = new RegExp(
         `(?:^|[^\\w-])${escapeRegExp(cls.name)}(?:$|[^\\w-])`,
       );
       if (re.test(sourceCorpus)) {
         continue;
       }
+
+      // Global SCSS composed into a used stylesheet — keep as low-confidence skip
+      if (!isModule && usedStylesheets.has(absolutePath)) {
+        continue;
+      }
+
       items.push({
         relativePath,
         absolutePath,
         name: `.${cls.name}`,
         line: cls.line,
-        detail: "Class selector not found in source strings",
+        detail: isModule
+          ? "CSS module class not seen as styles.x / styles['x']"
+          : "Class selector not found in source strings",
+        bucket: "likely-dead",
+        confidence: "low",
+        reason: "not_in_asset_graph",
+        falsePositiveHint:
+          "Dynamic classNames / :global / hashed modules may hide usage.",
       });
     }
   }
@@ -195,6 +223,43 @@ export async function findDeadCss(
       a.relativePath.localeCompare(b.relativePath) ||
       (a.name ?? "").localeCompare(b.name ?? ""),
   );
+}
+
+function findPairedModuleSources(
+  cssPath: string,
+  index: ImportIndex,
+): string[] {
+  const importers = index.getImporters(cssPath);
+  if (importers.length > 0) {
+    return importers;
+  }
+  // Fallback: same basename neighbors
+  const base = cssPath.replace(/\.module\.(css|scss)$/i, "");
+  return index.files.filter((filePath) => {
+    if (filePath === cssPath) {
+      return false;
+    }
+    const stem = filePath.replace(/\.(tsx?|jsx?)$/i, "");
+    return stem === base;
+  });
+}
+
+function cssModuleClassUsed(
+  className: string,
+  pairedSources: string[],
+  index: ImportIndex,
+): boolean {
+  const patterns = [
+    new RegExp(`styles\\.${escapeRegExp(className)}\\b`),
+    new RegExp(`styles\\[['"]${escapeRegExp(className)}['"]\\]`),
+  ];
+  for (const filePath of pairedSources) {
+    const content = index.getContent(filePath);
+    if (patterns.some((re) => re.test(content))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function escapeRegExp(value: string): string {
