@@ -279,8 +279,8 @@
     "pretest": "yarn run compile-tests && yarn run compile && yarn run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "vsix": "yarn package && npx @vscode/vsce package --no-dependencies --allow-missing-repository",
-    "install:local": "yarn vsix && cursor --install-extension kyo-tools-0.0.1.vsix --force"
+    "vsix": "yarn package && npx @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "install:local": "yarn vsix && node scripts/install-local.cjs"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

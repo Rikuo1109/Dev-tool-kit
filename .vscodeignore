@@ -1,9 +1,15 @@
 .vscode/**
 .vscode-test/**
 .gitnexus/**
+.claude/**
+.cursor/**
+scripts/**
 out/**
 node_modules/**
 src/**
+AGENTS.md
+CLAUDE.md
+docs/**
 .gitignore
 .yarnrc
 webpack.config.js

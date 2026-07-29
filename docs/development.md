@@ -16,8 +16,10 @@ Press **F5** in the extension workspace to launch a new VS Code window with the 
 | `yarn watch`         | Webpack watch mode              |
 | `yarn lint`          | ESLint on `src/`                |
 | `yarn test`          | Run extension tests             |
-| `yarn vsix`          | Production build + package VSIX |
-| `yarn install:local` | Build VSIX + install to Cursor  |
+| `yarn vsix`          | Production build + package VSIX (non-interactive) |
+| `yarn install:local` | Build VSIX + install via `cursor` or `code` CLI   |
+
+If `yarn install:local` says neither CLI is on PATH, the `.vsix` is still built — install with Command Palette → **Extensions: Install from VSIX…**, or add the Cursor/VS Code shell command to PATH.
 
 ## Project Layout
 
