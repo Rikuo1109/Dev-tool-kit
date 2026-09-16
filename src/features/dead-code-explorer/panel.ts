@@ -1,28 +1,23 @@
-import * as vscode from "vscode";
-import { escapeHtml, isDarkTheme } from "../../shared/html";
-import { openFileInEditor } from "../../shared/openInEditor";
+import * as vscode from 'vscode';
+import { escapeHtml, isDarkTheme } from '../../shared/html';
+import { openFileInEditor } from '../../shared/openInEditor';
 import {
-  panelContentStyles,
-  panelDocument,
-  reloadPanelScript,
-  renderPanelHeader,
-} from "../../shared/panel";
-import { getPanelTheme, PanelTheme } from "../../shared/theme";
-import {
-  DeadBucket,
-  DeadCodeReport,
-  DeadItem,
-  PRIMARY_BUCKETS,
-} from "./types";
+    panelContentStyles,
+    panelDocument,
+    reloadPanelScript,
+    renderPanelHeader,
+} from '../../shared/panel';
+import { getPanelTheme, PanelTheme } from '../../shared/theme';
+import { DeadBucket, DeadCodeReport, DeadItem, PRIMARY_BUCKETS } from './types';
 
 function rowDataAttrs(absolutePath: string, line = 0): string {
-  return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
+    return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
 }
 
 const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
 
 function panelExtraStyles(t: PanelTheme): string {
-  return `
+    return `
     .sticky-chrome {
       position: sticky;
       top: 0;
@@ -117,61 +112,57 @@ function panelExtraStyles(t: PanelTheme): string {
 }
 
 function renderFileRows(items: DeadItem[], emptyMsg: string): string {
-  if (items.length === 0) {
-    return `<div class="empty">${emptyMsg}</div>`;
-  }
-  return items
-    .map((item) => {
-      const bucket = item.bucket ?? "unknown";
-      const confidence = item.confidence ?? "medium";
-      return `
+    if (items.length === 0) {
+        return `<div class="empty">${emptyMsg}</div>`;
+    }
+    return items
+        .map((item) => {
+            const bucket = item.bucket ?? 'unknown';
+            const confidence = item.confidence ?? 'medium';
+            return `
     <button type="button" class="row" ${rowDataAttrs(item.absolutePath, item.line ?? 0)} data-bucket="${bucket}">
       <span class="path">${escapeHtml(item.relativePath)}</span>
-      ${item.name ? `<span class="badge error">${escapeHtml(item.name)}</span>` : ""}
+      ${item.name ? `<span class="badge error">${escapeHtml(item.name)}</span>` : ''}
       <div class="row-meta">
         <span class="badge bucket-${bucket}">${escapeHtml(bucket)}</span>
         <span class="badge conf-${confidence}">${escapeHtml(confidence)}</span>
-        ${item.reason ? `<span class="detail">${escapeHtml(item.reason)}</span>` : ""}
-        ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ""}
+        ${item.reason ? `<span class="detail">${escapeHtml(item.reason)}</span>` : ''}
+        ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ''}
         ${
-          item.falsePositiveHint
-            ? `<span class="hint">${escapeHtml(item.falsePositiveHint)}</span>`
-            : ""
+            item.falsePositiveHint
+                ? `<span class="hint">${escapeHtml(item.falsePositiveHint)}</span>`
+                : ''
         }
       </div>
     </button>`;
-    })
-    .join("");
+        })
+        .join('');
 }
 
 function renderRows(items: DeadItem[], emptyMsg: string): string {
-  if (items.length === 0) {
-    return `<div class="empty">${emptyMsg}</div>`;
-  }
-  return items
-    .map(
-      (item) => `
+    if (items.length === 0) {
+        return `<div class="empty">${emptyMsg}</div>`;
+    }
+    return items
+        .map(
+            (item) => `
     <button type="button" class="row" ${rowDataAttrs(item.absolutePath, item.line ?? 0)}>
       <span class="path">${escapeHtml(item.relativePath)}</span>
-      ${item.name ? `<span class="badge error">${escapeHtml(item.name)}</span>` : ""}
-      ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ""}
+      ${item.name ? `<span class="badge error">${escapeHtml(item.name)}</span>` : ''}
+      ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ''}
     </button>`,
-    )
-    .join("");
+        )
+        .join('');
 }
 
 function getLoadingHtml(folderName: string, isDark: boolean): string {
-  const t = getPanelTheme(isDark);
+    const t = getPanelTheme(isDark);
 
-  return panelDocument({
-    title: "Dead Code Explorer",
-    styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
-    body: `
-      ${renderPanelHeader(
-        `Dead Code Explorer — ${escapeHtml(folderName)}`,
-        "Scanning…",
-        reloadBtn,
-      )}
+    return panelDocument({
+        title: 'Dead Code Explorer',
+        styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
+        body: `
+      ${renderPanelHeader(`Dead Code Explorer — ${escapeHtml(folderName)}`, 'Scanning…', reloadBtn)}
       <div class="loading">
         <div class="spinner"></div>
         <h2>Exploring dead code</h2>
@@ -182,81 +173,81 @@ function getLoadingHtml(folderName: string, isDark: boolean): string {
         ${reloadPanelScript()}
       </script>
     `,
-  });
+    });
 }
 
 function bucketPills(report: DeadCodeReport): string {
-  const order: DeadBucket[] = [
-    "dead",
-    "likely-dead",
-    "runtime",
-    "entry",
-    "tooling",
-    "ambient",
-    "vendor",
-    "unknown",
-  ];
-  return order
-    .map((bucket) => {
-      const count = report.filesSummary.byBucket[bucket];
-      if (!count) {
-        return "";
-      }
-      return `<span class="summary-pill">${bucket}: ${count}</span>`;
-    })
-    .filter(Boolean)
-    .join("");
+    const order: DeadBucket[] = [
+        'dead',
+        'likely-dead',
+        'runtime',
+        'entry',
+        'tooling',
+        'ambient',
+        'vendor',
+        'unknown',
+    ];
+    return order
+        .map((bucket) => {
+            const count = report.filesSummary.byBucket[bucket];
+            if (!count) {
+                return '';
+            }
+            return `<span class="summary-pill">${bucket}: ${count}</span>`;
+        })
+        .filter(Boolean)
+        .join('');
 }
 
 function getReportHtml(report: DeadCodeReport, isDark: boolean): string {
-  const t = getPanelTheme(isDark);
-  const primaryFileCount = report.deadFiles.length;
-  const totalIssues =
-    primaryFileCount +
-    report.deadClasses.length +
-    report.deadFunctions.length +
-    report.deadConstants.length +
-    report.deadRoutes.length +
-    report.deadApis.length +
-    report.deadCss.length;
-  const durationSec = (report.durationMs / 1000).toFixed(1);
-  const bannerClass = totalIssues > 0 ? "warn" : "success";
-  const noiseItems = report.allDeadFiles.filter(
-    (item) => !PRIMARY_BUCKETS.includes(item.bucket ?? "unknown"),
-  );
-  const entriesNote =
-    report.discoveredEntries.length > 0
-      ? `Entries: ${report.discoveredEntries.slice(0, 8).map(escapeHtml).join(", ")}${
-          report.discoveredEntries.length > 8 ? "…" : ""
-        }`
-      : "Entries: (none discovered beyond analyze globs)";
+    const t = getPanelTheme(isDark);
+    const primaryFileCount = report.deadFiles.length;
+    const totalIssues =
+        primaryFileCount +
+        report.deadClasses.length +
+        report.deadFunctions.length +
+        report.deadConstants.length +
+        report.deadRoutes.length +
+        report.deadApis.length +
+        report.deadCss.length;
+    const durationSec = (report.durationMs / 1000).toFixed(1);
+    const bannerClass = totalIssues > 0 ? 'warn' : 'success';
+    const noiseItems = report.allDeadFiles.filter(
+        (item) => !PRIMARY_BUCKETS.includes(item.bucket ?? 'unknown'),
+    );
+    const entriesNote =
+        report.discoveredEntries.length > 0
+            ? `Entries: ${report.discoveredEntries.slice(0, 8).map(escapeHtml).join(', ')}${
+                  report.discoveredEntries.length > 8 ? '…' : ''
+              }`
+            : 'Entries: (none discovered beyond analyze globs)';
 
-  const tabs: Array<{ id: string; label: string; count: number }> = [
-    { id: "files", label: "Files", count: primaryFileCount },
-    { id: "classes", label: "Classes", count: report.deadClasses.length },
-    { id: "functions", label: "Functions", count: report.deadFunctions.length },
-    { id: "constants", label: "Constants", count: report.deadConstants.length },
-    { id: "routes", label: "Routes", count: report.deadRoutes.length },
-    { id: "apis", label: "API", count: report.deadApis.length },
-    { id: "css", label: "CSS", count: report.deadCss.length },
-  ];
+    const tabs: Array<{ id: string; label: string; count: number }> = [
+        { id: 'files', label: 'Files', count: primaryFileCount },
+        { id: 'classes', label: 'Classes', count: report.deadClasses.length },
+        { id: 'functions', label: 'Functions', count: report.deadFunctions.length },
+        { id: 'constants', label: 'Constants', count: report.deadConstants.length },
+        { id: 'routes', label: 'Routes', count: report.deadRoutes.length },
+        { id: 'apis', label: 'API', count: report.deadApis.length },
+        { id: 'css', label: 'CSS', count: report.deadCss.length },
+    ];
 
-  return panelDocument({
-    title: "Dead Code Explorer",
-    styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
-    body: `
+    return panelDocument({
+        title: 'Dead Code Explorer',
+        styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
+        body: `
       <div class="sticky-chrome">
         ${renderPanelHeader(
-          `Dead Code Explorer — ${escapeHtml(report.folderName)}`,
-          `${report.scannedFiles} files scanned in ${durationSec}s · ${escapeHtml(entriesNote)}`,
-          reloadBtn,
+            `Dead Code Explorer — ${escapeHtml(report.folderName)}`,
+            `${report.scannedFiles} files scanned in ${durationSec}s · ${escapeHtml(entriesNote)}`,
+            reloadBtn,
         )}
 
         <div class="banner ${bannerClass}">
           ${
-            totalIssues > 0
-              ? `${totalIssues} primary issue(s) — Files shows dead + likely-dead only`
-              : "No primary dead items in this folder"
+              totalIssues > 0
+                  ? `${totalIssues} primary issue(s) — Files shows dead + likely-dead only`
+                  : 'No primary dead items in this folder'
           }
         </div>
 
@@ -278,11 +269,11 @@ function getReportHtml(report: DeadCodeReport, isDark: boolean): string {
 
         <div class="tabs">
           ${tabs
-            .map(
-              (tab, i) =>
-                `<button type="button" class="tab${i === 0 ? " active" : ""}" data-tab="${tab.id}">${tab.label} (${tab.count})</button>`,
-            )
-            .join("")}
+              .map(
+                  (tab, i) =>
+                      `<button type="button" class="tab${i === 0 ? ' active' : ''}" data-tab="${tab.id}">${tab.label} (${tab.count})</button>`,
+              )
+              .join('')}
         </div>
       </div>
 
@@ -290,29 +281,29 @@ function getReportHtml(report: DeadCodeReport, isDark: boolean): string {
         <div class="filter-row">
           <label><input type="checkbox" id="show-noise" /> Show noise buckets (${noiseItems.length})</label>
         </div>
-        <div class="list" id="primary-files-list">${renderFileRows(report.deadFiles, "No primary dead files.")}</div>
+        <div class="list" id="primary-files-list">${renderFileRows(report.deadFiles, 'No primary dead files.')}</div>
         <div class="noise-panel" id="noise-files-list">
           <h3 class="section-title" style="margin:10px 0 6px;font-size:0.8rem">Noise / classified-out</h3>
-          <div class="list">${renderFileRows(noiseItems, "No noise items.")}</div>
+          <div class="list">${renderFileRows(noiseItems, 'No noise items.')}</div>
         </div>
       </div>
       <div class="panel" id="panel-classes">
-        <div class="list">${renderRows(report.deadClasses, "No dead classes found.")}</div>
+        <div class="list">${renderRows(report.deadClasses, 'No dead classes found.')}</div>
       </div>
       <div class="panel" id="panel-functions">
-        <div class="list">${renderRows(report.deadFunctions, "No dead functions found.")}</div>
+        <div class="list">${renderRows(report.deadFunctions, 'No dead functions found.')}</div>
       </div>
       <div class="panel" id="panel-constants">
-        <div class="list">${renderRows(report.deadConstants, "No dead constants found.")}</div>
+        <div class="list">${renderRows(report.deadConstants, 'No dead constants found.')}</div>
       </div>
       <div class="panel" id="panel-routes">
-        <div class="list">${renderRows(report.deadRoutes, "No dead routes found.")}</div>
+        <div class="list">${renderRows(report.deadRoutes, 'No dead routes found.')}</div>
       </div>
       <div class="panel" id="panel-apis">
-        <div class="list">${renderRows(report.deadApis, "No dead APIs found.")}</div>
+        <div class="list">${renderRows(report.deadApis, 'No dead APIs found.')}</div>
       </div>
       <div class="panel" id="panel-css">
-        <div class="list">${renderRows(report.deadCss, "No dead CSS classes found.")}</div>
+        <div class="list">${renderRows(report.deadCss, 'No dead CSS classes found.')}</div>
       </div>
 
       <p class="note">
@@ -356,62 +347,56 @@ function getReportHtml(report: DeadCodeReport, isDark: boolean): string {
         ${reloadPanelScript()}
       </script>
     `,
-  });
+    });
 }
 
 export class DeadCodeExplorerPanel {
-  private readonly panel: vscode.WebviewPanel;
-  private reloadHandler: (() => void | Promise<void>) | undefined;
+    private readonly panel: vscode.WebviewPanel;
+    private reloadHandler: (() => void | Promise<void>) | undefined;
 
-  private constructor(
-    panel: vscode.WebviewPanel,
-    folderName: string,
-    isDark: boolean,
-  ) {
-    this.panel = panel;
-    this.panel.webview.html = getLoadingHtml(folderName, isDark);
-    this.panel.webview.onDidReceiveMessage(async (message) => {
-      if (message.type === "open" && typeof message.path === "string") {
-        const line =
-          typeof message.line === "number" && message.line > 0
-            ? message.line
-            : 0;
-        await openFileInEditor(message.path, line);
-        return;
-      }
+    private constructor(panel: vscode.WebviewPanel, folderName: string, isDark: boolean) {
+        this.panel = panel;
+        this.panel.webview.html = getLoadingHtml(folderName, isDark);
+        this.panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'open' && typeof message.path === 'string') {
+                const line =
+                    typeof message.line === 'number' && message.line > 0 ? message.line : 0;
+                await openFileInEditor(message.path, line);
+                return;
+            }
 
-      if (message.type === "reload" && this.reloadHandler) {
-        await this.reloadHandler();
-      }
-    });
-  }
+            if (message.type === 'reload' && this.reloadHandler) {
+                await this.reloadHandler();
+            }
+        });
+    }
 
-  static open(folderName: string, isDark: boolean): DeadCodeExplorerPanel {
-    const panel = vscode.window.createWebviewPanel(
-      "kyoToolsDeadCodeExplorer",
-      `Dead Code Explorer — ${folderName}`,
-      vscode.ViewColumn.One,
-      { enableScripts: true, retainContextWhenHidden: true },
-    );
+    static open(folderName: string, isDark: boolean): DeadCodeExplorerPanel {
+        const panel = vscode.window.createWebviewPanel(
+            'kyoToolsDeadCodeExplorer',
+            `Dead Code Explorer — ${folderName}`,
+            vscode.ViewColumn.One,
+            { enableScripts: true, retainContextWhenHidden: true },
+        );
 
-    return new DeadCodeExplorerPanel(panel, folderName, isDark);
-  }
+        return new DeadCodeExplorerPanel(panel, folderName, isDark);
+    }
 
-  bindFolder(_uri: vscode.Uri, onReload: () => void | Promise<void>): void {
-    this.reloadHandler = onReload;
-  }
+    bindFolder(_uri: vscode.Uri, onReload: () => void | Promise<void>): void {
+        this.reloadHandler = onReload;
+    }
 
-  showLoading(folderName: string): void {
-    this.panel.webview.html = getLoadingHtml(folderName, isDarkTheme());
-    this.panel.title = `Dead Code Explorer — ${folderName}`;
-  }
+    showLoading(folderName: string): void {
+        this.panel.webview.html = getLoadingHtml(folderName, isDarkTheme());
+        this.panel.title = `Dead Code Explorer — ${folderName}`;
+    }
 
-  showReport(report: DeadCodeReport): void {
-    this.panel.webview.html = getReportHtml(report, isDarkTheme());
-    this.panel.title = `Dead Code Explorer — ${report.folderName}`;
-  }
+    showReport(report: DeadCodeReport): void {
+        this.panel.webview.html = getReportHtml(report, isDarkTheme());
+        this.panel.title = `Dead Code Explorer — ${report.folderName}`;
+    }
 
-  dispose(): void {
-    this.panel.dispose();
-  }
+    dispose(): void {
+        this.panel.dispose();
+    }
 }

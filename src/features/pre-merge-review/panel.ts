@@ -1,16 +1,12 @@
-import * as vscode from "vscode";
-import { escapeHtml, isDarkTheme } from "../../shared/html";
-import { openFileInEditor } from "../../shared/openInEditor";
-import {
-  panelContentStyles,
-  panelDocument,
-  renderPanelHeader,
-} from "../../shared/panel";
-import { getPanelTheme, PanelTheme } from "../../shared/theme";
-import { PreMergeReviewReport, ReviewIssue } from "./types";
+import * as vscode from 'vscode';
+import { escapeHtml, isDarkTheme } from '../../shared/html';
+import { openFileInEditor } from '../../shared/openInEditor';
+import { panelContentStyles, panelDocument, renderPanelHeader } from '../../shared/panel';
+import { getPanelTheme, PanelTheme } from '../../shared/theme';
+import { PreMergeReviewReport, ReviewIssue } from './types';
 
 function rowDataAttrs(absolutePath: string, line = 0): string {
-  return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
+    return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
 }
 
 const toolbarBtns = `
@@ -19,7 +15,7 @@ const toolbarBtns = `
 `;
 
 function panelToolbarScript(): string {
-  return `
+    return `
     function bindToolbar() {
       const reloadBtn = document.getElementById("reload-btn");
       if (reloadBtn) {
@@ -43,7 +39,7 @@ function panelToolbarScript(): string {
 }
 
 function panelExtraStyles(t: PanelTheme): string {
-  return `
+    return `
     .sticky-chrome {
       position: sticky;
       top: 0;
@@ -108,66 +104,62 @@ function panelExtraStyles(t: PanelTheme): string {
   `;
 }
 
-function severityBadge(severity: ReviewIssue["severity"]): string {
-  if (severity === "critical") {
-    return "error";
-  }
-  if (severity === "warning") {
-    return "warn";
-  }
-  return "unchanged";
+function severityBadge(severity: ReviewIssue['severity']): string {
+    if (severity === 'critical') {
+        return 'error';
+    }
+    if (severity === 'warning') {
+        return 'warn';
+    }
+    return 'unchanged';
 }
 
 function branchSubtitle(currentBranch: string, compareBranch: string): string {
-  return `Current: ${currentBranch} · Compare with: ${compareBranch}`;
+    return `Current: ${currentBranch} · Compare with: ${compareBranch}`;
 }
 
 function renderFileCards(report: PreMergeReviewReport): string {
-  if (report.issues.length === 0) {
-    return `<div class="empty">No issues found between ${escapeHtml(report.currentBranch)} and ${escapeHtml(report.compareBranch)}.</div>`;
-  }
+    if (report.issues.length === 0) {
+        return `<div class="empty">No issues found between ${escapeHtml(report.currentBranch)} and ${escapeHtml(report.compareBranch)}.</div>`;
+    }
 
-  const byFile = new Map<string, ReviewIssue[]>();
-  for (const issue of report.issues) {
-    const list = byFile.get(issue.relativePath) ?? [];
-    list.push(issue);
-    byFile.set(issue.relativePath, list);
-  }
+    const byFile = new Map<string, ReviewIssue[]>();
+    for (const issue of report.issues) {
+        const list = byFile.get(issue.relativePath) ?? [];
+        list.push(issue);
+        byFile.set(issue.relativePath, list);
+    }
 
-  return [...byFile.entries()]
-    .map(
-      ([relativePath, issues]) => `
+    return [...byFile.entries()]
+        .map(
+            ([relativePath, issues]) => `
       <article class="file-card">
         <div class="file-head">${escapeHtml(relativePath)}</div>
         ${issues
-          .map(
-            (issue) => `
+            .map(
+                (issue) => `
           <button type="button" class="issue-row" ${rowDataAttrs(issue.absolutePath, issue.line)}>
             <span class="badge ${severityBadge(issue.severity)}">${issue.severity}</span>
             <span class="issue-meta">${escapeHtml(issue.category)} · L${issue.line}</span>
             <span class="issue-text">${escapeHtml(issue.message)}</span>
           </button>`,
-          )
-          .join("")}
+            )
+            .join('')}
       </article>`,
-    )
-    .join("");
+        )
+        .join('');
 }
 
-function getLoadingHtml(
-  currentBranch: string,
-  compareBranch: string,
-  isDark: boolean,
-): string {
-  const t = getPanelTheme(isDark);
-  return panelDocument({
-    title: "Pre-Merge Review",
-    styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
-    body: `
+function getLoadingHtml(currentBranch: string, compareBranch: string, isDark: boolean): string {
+    const t = getPanelTheme(isDark);
+    return panelDocument({
+        title: 'Pre-Merge Review',
+        styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
+        body: `
       ${renderPanelHeader(
-        `Pre-Merge Review — ${escapeHtml(currentBranch)}`,
-        `Comparing with ${escapeHtml(compareBranch)}…`,
-        toolbarBtns,
+          `Pre-Merge Review — ${escapeHtml(currentBranch)}`,
+          `Comparing with ${escapeHtml(compareBranch)}…`,
+          toolbarBtns,
       )}
       <div class="loading">
         <div class="spinner"></div>
@@ -179,34 +171,40 @@ function getLoadingHtml(
         ${panelToolbarScript()}
       </script>
     `,
-  });
+    });
 }
 
 function getReportHtml(report: PreMergeReviewReport, isDark: boolean): string {
-  const t = getPanelTheme(isDark);
-  const critical = report.issues.filter((issue) => issue.severity === "critical").length;
-  const warning = report.issues.filter((issue) => issue.severity === "warning").length;
-  const info = report.issues.filter((issue) => issue.severity === "info").length;
-  const durationSec = (report.durationMs / 1000).toFixed(1);
-  const bannerClass =
-    critical > 0 ? "error" : warning > 0 ? "warn" : report.issues.length > 0 ? "warn" : "success";
+    const t = getPanelTheme(isDark);
+    const critical = report.issues.filter((issue) => issue.severity === 'critical').length;
+    const warning = report.issues.filter((issue) => issue.severity === 'warning').length;
+    const info = report.issues.filter((issue) => issue.severity === 'info').length;
+    const durationSec = (report.durationMs / 1000).toFixed(1);
+    const bannerClass =
+        critical > 0
+            ? 'error'
+            : warning > 0
+              ? 'warn'
+              : report.issues.length > 0
+                ? 'warn'
+                : 'success';
 
-  return panelDocument({
-    title: "Pre-Merge Review",
-    styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
-    body: `
+    return panelDocument({
+        title: 'Pre-Merge Review',
+        styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
+        body: `
       <div class="sticky-chrome">
         ${renderPanelHeader(
-          `Pre-Merge Review — ${escapeHtml(report.currentBranch)}`,
-          `${report.scannedFiles} file(s) · ${branchSubtitle(report.currentBranch, report.compareBranch)} · ${durationSec}s`,
-          toolbarBtns,
+            `Pre-Merge Review — ${escapeHtml(report.currentBranch)}`,
+            `${report.scannedFiles} file(s) · ${branchSubtitle(report.currentBranch, report.compareBranch)} · ${durationSec}s`,
+            toolbarBtns,
         )}
 
         <div class="banner ${bannerClass}">
           ${
-            report.issues.length > 0
-              ? `${report.issues.length} issue(s) in diff — review before merge`
-              : "Diff looks clean — no issues detected"
+              report.issues.length > 0
+                  ? `${report.issues.length} issue(s) in diff — review before merge`
+                  : 'Diff looks clean — no issues detected'
           }
         </div>
 
@@ -252,78 +250,74 @@ function getReportHtml(report: PreMergeReviewReport, isDark: boolean): string {
         ${panelToolbarScript()}
       </script>
     `,
-  });
+    });
 }
 
 export class PreMergeReviewPanel {
-  private readonly panel: vscode.WebviewPanel;
-  private reloadHandler: (() => void | Promise<void>) | undefined;
-  private changeBranchHandler: (() => void | Promise<void>) | undefined;
+    private readonly panel: vscode.WebviewPanel;
+    private reloadHandler: (() => void | Promise<void>) | undefined;
+    private changeBranchHandler: (() => void | Promise<void>) | undefined;
 
-  private constructor(
-    panel: vscode.WebviewPanel,
-    currentBranch: string,
-    compareBranch: string,
-    isDark: boolean,
-  ) {
-    this.panel = panel;
-    this.panel.webview.html = getLoadingHtml(currentBranch, compareBranch, isDark);
-    this.panel.webview.onDidReceiveMessage(async (message) => {
-      if (message.type === "open" && typeof message.path === "string") {
-        const line =
-          typeof message.line === "number" && message.line > 0 ? message.line : 0;
-        await openFileInEditor(message.path, line);
-        return;
-      }
+    private constructor(
+        panel: vscode.WebviewPanel,
+        currentBranch: string,
+        compareBranch: string,
+        isDark: boolean,
+    ) {
+        this.panel = panel;
+        this.panel.webview.html = getLoadingHtml(currentBranch, compareBranch, isDark);
+        this.panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'open' && typeof message.path === 'string') {
+                const line =
+                    typeof message.line === 'number' && message.line > 0 ? message.line : 0;
+                await openFileInEditor(message.path, line);
+                return;
+            }
 
-      if (message.type === "reload" && this.reloadHandler) {
-        await this.reloadHandler();
-        return;
-      }
+            if (message.type === 'reload' && this.reloadHandler) {
+                await this.reloadHandler();
+                return;
+            }
 
-      if (message.type === "changeBranch" && this.changeBranchHandler) {
-        await this.changeBranchHandler();
-      }
-    });
-  }
+            if (message.type === 'changeBranch' && this.changeBranchHandler) {
+                await this.changeBranchHandler();
+            }
+        });
+    }
 
-  static open(
-    currentBranch: string,
-    compareBranch: string,
-    isDark: boolean,
-  ): PreMergeReviewPanel {
-    const panel = vscode.window.createWebviewPanel(
-      "kyoToolsPreMergeReview",
-      `Pre-Merge Review — ${currentBranch}`,
-      vscode.ViewColumn.One,
-      { enableScripts: true, retainContextWhenHidden: true },
-    );
-    return new PreMergeReviewPanel(panel, currentBranch, compareBranch, isDark);
-  }
+    static open(
+        currentBranch: string,
+        compareBranch: string,
+        isDark: boolean,
+    ): PreMergeReviewPanel {
+        const panel = vscode.window.createWebviewPanel(
+            'kyoToolsPreMergeReview',
+            `Pre-Merge Review — ${currentBranch}`,
+            vscode.ViewColumn.One,
+            { enableScripts: true, retainContextWhenHidden: true },
+        );
+        return new PreMergeReviewPanel(panel, currentBranch, compareBranch, isDark);
+    }
 
-  bindReload(onReload: () => void | Promise<void>): void {
-    this.reloadHandler = onReload;
-  }
+    bindReload(onReload: () => void | Promise<void>): void {
+        this.reloadHandler = onReload;
+    }
 
-  bindChangeBranch(onChangeBranch: () => void | Promise<void>): void {
-    this.changeBranchHandler = onChangeBranch;
-  }
+    bindChangeBranch(onChangeBranch: () => void | Promise<void>): void {
+        this.changeBranchHandler = onChangeBranch;
+    }
 
-  showLoading(currentBranch: string, compareBranch: string): void {
-    this.panel.webview.html = getLoadingHtml(
-      currentBranch,
-      compareBranch,
-      isDarkTheme(),
-    );
-    this.panel.title = `Pre-Merge Review — ${currentBranch}`;
-  }
+    showLoading(currentBranch: string, compareBranch: string): void {
+        this.panel.webview.html = getLoadingHtml(currentBranch, compareBranch, isDarkTheme());
+        this.panel.title = `Pre-Merge Review — ${currentBranch}`;
+    }
 
-  showReport(report: PreMergeReviewReport): void {
-    this.panel.webview.html = getReportHtml(report, isDarkTheme());
-    this.panel.title = `Pre-Merge Review — ${report.currentBranch}`;
-  }
+    showReport(report: PreMergeReviewReport): void {
+        this.panel.webview.html = getReportHtml(report, isDarkTheme());
+        this.panel.title = `Pre-Merge Review — ${report.currentBranch}`;
+    }
 
-  dispose(): void {
-    this.panel.dispose();
-  }
+    dispose(): void {
+        this.panel.dispose();
+    }
 }

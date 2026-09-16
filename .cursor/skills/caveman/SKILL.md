@@ -1,9 +1,9 @@
 ---
 name: caveman
 description: >
-  Ultra-compressed communication mode. Cuts token usage by speaking terse while keeping
-  full technical accuracy. Supports lite, full, ultra, and wenyan variants.
-  Use when user says "caveman mode", "/caveman", "less tokens", or "be brief".
+    Ultra-compressed communication mode. Cuts token usage by speaking terse while keeping
+    full technical accuracy. Supports lite, full, ultra, and wenyan variants.
+    Use when user says "caveman mode", "/caveman", "less tokens", or "be brief".
 ---
 
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
@@ -24,11 +24,11 @@ No self-reference. Never announce the style unless the user asks.
 
 ## Intensity
 
-| Level | What change |
-|-------|-------------|
-| **lite** | No filler/hedging. Keep articles + full sentences. Professional but tight |
-| **full** | Drop articles, fragments OK, short synonyms |
-| **ultra** | Abbreviate prose words only; never abbreviate code symbols |
+| Level     | What change                                                               |
+| --------- | ------------------------------------------------------------------------- |
+| **lite**  | No filler/hedging. Keep articles + full sentences. Professional but tight |
+| **full**  | Drop articles, fragments OK, short synonyms                               |
+| **ultra** | Abbreviate prose words only; never abbreviate code symbols                |
 
 ## Auto-Clarity
 

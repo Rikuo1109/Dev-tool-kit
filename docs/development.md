@@ -10,12 +10,12 @@ Press **F5** in the extension workspace to launch a new VS Code window with the 
 
 ## Scripts
 
-| Script               | Description                     |
-| -------------------- | ------------------------------- |
-| `yarn compile`       | Webpack dev build               |
-| `yarn watch`         | Webpack watch mode              |
-| `yarn lint`          | ESLint on `src/`                |
-| `yarn test`          | Run extension tests             |
+| Script               | Description                                       |
+| -------------------- | ------------------------------------------------- |
+| `yarn compile`       | Webpack dev build                                 |
+| `yarn watch`         | Webpack watch mode                                |
+| `yarn lint`          | ESLint on `src/`                                  |
+| `yarn test`          | Run extension tests                               |
 | `yarn vsix`          | Production build + package VSIX (non-interactive) |
 | `yarn install:local` | Build VSIX + install via `cursor` or `code` CLI   |
 
@@ -58,24 +58,24 @@ src/
 
 ## Commands
 
-| Command ID                      | Title            | How to invoke                                      |
-| ------------------------------ | ---------------- | -------------------------------------------------- |
-| `kyo-tools.initAiTemplate`     | Init AI Template | Command Palette                                    |
-| `code-dashboard.open`          | Code Dashboard   | Explorer → right-click **folder**                  |
-| `kyo-tools.organizeImports`    | Organize Imports | Explorer → right-click **folder** (hidden in palette) |
-| `kyo-tools.codeGraph`          | Code Graph       | Explorer → right-click **file**                    |
-| `kyo-tools.codeAnalyze`        | Code Analyze     | Explorer → right-click **folder** · Command Palette |
-| `kyo-tools.preMergeReview`     | Pre-Merge Review | Command Palette                                    |
+| Command ID                  | Title            | How to invoke                                         |
+| --------------------------- | ---------------- | ----------------------------------------------------- |
+| `kyo-tools.initAiTemplate`  | Init AI Template | Command Palette                                       |
+| `code-dashboard.open`       | Code Dashboard   | Explorer → right-click **folder**                     |
+| `kyo-tools.organizeImports` | Organize Imports | Explorer → right-click **folder** (hidden in palette) |
+| `kyo-tools.codeGraph`       | Code Graph       | Explorer → right-click **file**                       |
+| `kyo-tools.codeAnalyze`     | Code Analyze     | Explorer → right-click **folder** · Command Palette   |
+| `kyo-tools.preMergeReview`  | Pre-Merge Review | Command Palette                                       |
 
 ## Configuration
 
 All settings under `kyo-tools.codeAnalyze.*`:
 
-| Setting                              | Type   | Default | Description                                |
-| ------------------------------------ | :----: | :-----: | ------------------------------------------ |
-| `kyo-tools.codeAnalyze.entryGlobs`   | array  | see source | Entry point patterns excluded from unused detection |
-| `kyo-tools.codeAnalyze.excludeGlobs` | array  | see source | Files excluded from analysis               |
-| `kyo-tools.codeAnalyze.duplicateMinLines` | number | 6    | Minimum non-empty lines for duplicate detection |
-| `kyo-tools.codeAnalyze.largeFileLoc` | number | 300     | Warn when file exceeds this many lines     |
-| `kyo-tools.codeAnalyze.largeFunctionLoc` | number | 80   | Warn when function exceeds this many lines |
-| `kyo-tools.codeAnalyze.largeFunctionParams` | number | 5 | Warn when function exceeds this many params |
+| Setting                                     |  Type  |  Default   | Description                                         |
+| ------------------------------------------- | :----: | :--------: | --------------------------------------------------- |
+| `kyo-tools.codeAnalyze.entryGlobs`          | array  | see source | Entry point patterns excluded from unused detection |
+| `kyo-tools.codeAnalyze.excludeGlobs`        | array  | see source | Files excluded from analysis                        |
+| `kyo-tools.codeAnalyze.duplicateMinLines`   | number |     6      | Minimum non-empty lines for duplicate detection     |
+| `kyo-tools.codeAnalyze.largeFileLoc`        | number |    300     | Warn when file exceeds this many lines              |
+| `kyo-tools.codeAnalyze.largeFunctionLoc`    | number |     80     | Warn when function exceeds this many lines          |
+| `kyo-tools.codeAnalyze.largeFunctionParams` | number |     5      | Warn when function exceeds this many params         |

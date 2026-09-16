@@ -118,32 +118,32 @@ export const AI_TEMPLATE_MANIFEST = `{
 `;
 
 export interface TemplateFile {
-  relativePath: string;
-  content: string;
-  label: string;
+    relativePath: string;
+    content: string;
+    label: string;
 }
 
 export function getTemplateFiles(): TemplateFile[] {
-  return [
-    {
-      relativePath: ".cursor/rules/caveman-lite.mdc",
-      content: CAVEMAN_LITE_RULE,
-      label: "Caveman lite rule",
-    },
-    {
-      relativePath: ".cursor/skills/caveman/SKILL.md",
-      content: CAVEMAN_SKILL,
-      label: "Caveman skill",
-    },
-    {
-      relativePath: ".cursor/rules/ponytail.mdc",
-      content: PONYTAIL_RULE,
-      label: "Ponytail rule",
-    },
-    {
-      relativePath: ".cursor/kyo-tools-ai-template.json",
-      content: AI_TEMPLATE_MANIFEST,
-      label: "AI template manifest",
-    },
-  ];
+    return [
+        {
+            relativePath: '.cursor/rules/caveman-lite.mdc',
+            content: CAVEMAN_LITE_RULE,
+            label: 'Caveman lite rule',
+        },
+        {
+            relativePath: '.cursor/skills/caveman/SKILL.md',
+            content: CAVEMAN_SKILL,
+            label: 'Caveman skill',
+        },
+        {
+            relativePath: '.cursor/rules/ponytail.mdc',
+            content: PONYTAIL_RULE,
+            label: 'Ponytail rule',
+        },
+        {
+            relativePath: '.cursor/kyo-tools-ai-template.json',
+            content: AI_TEMPLATE_MANIFEST,
+            label: 'AI template manifest',
+        },
+    ];
 }

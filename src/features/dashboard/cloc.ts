@@ -1,168 +1,163 @@
 interface ClocFileEntry {
-  blank: number;
-  comment: number;
-  code: number;
-  language: string;
+    blank: number;
+    comment: number;
+    code: number;
+    language: string;
 }
 
 export interface FileStat {
-  relativePath: string;
-  absolutePath: string;
-  code: number;
-  blank: number;
-  comment: number;
+    relativePath: string;
+    absolutePath: string;
+    code: number;
+    blank: number;
+    comment: number;
 }
 
 export interface LangStat {
-  name: string;
-  nFiles: number;
-  code: number;
-  blank: number;
-  comment: number;
-  topFiles: FileStat[];
-  smallestFiles: FileStat[];
+    name: string;
+    nFiles: number;
+    code: number;
+    blank: number;
+    comment: number;
+    topFiles: FileStat[];
+    smallestFiles: FileStat[];
 }
 
-import { GitChangeStats, formatGitChartLabels } from "./gitChanges";
-import { TodoItem } from "./todos";
-import { escapeHtml } from "../../shared/html";
+import { GitChangeStats, formatGitChartLabels } from './gitChanges';
+import { TodoItem } from './todos';
+import { escapeHtml } from '../../shared/html';
 import {
-  panelContentStyles,
-  panelDocument,
-  panelWebviewCsp,
-  renderPanelHeader,
-} from "../../shared/panel";
-import { getPanelTheme } from "../../shared/theme";
+    panelContentStyles,
+    panelDocument,
+    panelWebviewCsp,
+    renderPanelHeader,
+} from '../../shared/panel';
+import { getPanelTheme } from '../../shared/theme';
 
 export interface DashboardData {
-  folderName: string;
-  totalFiles: number;
-  totalCode: number;
-  totalBlank: number;
-  totalComment: number;
-  languages: LangStat[];
-  gitChanges: GitChangeStats;
-  subrepoCount: number;
-  todos: TodoItem[];
-  todoTotal: number;
+    folderName: string;
+    totalFiles: number;
+    totalCode: number;
+    totalBlank: number;
+    totalComment: number;
+    languages: LangStat[];
+    gitChanges: GitChangeStats;
+    subrepoCount: number;
+    todos: TodoItem[];
+    todoTotal: number;
 }
 
 const TOP_FILES_PER_LANG = 5;
 
 const LANG_COLORS = [
-  "#6366f1",
-  "#22c55e",
-  "#f59e0b",
-  "#ef4444",
-  "#06b6d4",
-  "#a855f7",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
-  "#84cc16",
+    '#6366f1',
+    '#22c55e',
+    '#f59e0b',
+    '#ef4444',
+    '#06b6d4',
+    '#a855f7',
+    '#ec4899',
+    '#14b8a6',
+    '#f97316',
+    '#84cc16',
 ];
 
 export function parseClocData(
-  raw: Record<string, unknown>,
-  folder: string,
-  folderName: string,
-  gitChanges: GitChangeStats,
-  subrepoCount = 0,
-  todos: TodoItem[] = [],
-  todoTotal = 0,
+    raw: Record<string, unknown>,
+    folder: string,
+    folderName: string,
+    gitChanges: GitChangeStats,
+    subrepoCount = 0,
+    todos: TodoItem[] = [],
+    todoTotal = 0,
 ): DashboardData {
-  const normalizedFolder = folder.replace(/\\/g, "/").replace(/\/$/, "");
-  const filesByLang = new Map<string, FileStat[]>();
+    const normalizedFolder = folder.replace(/\\/g, '/').replace(/\/$/, '');
+    const filesByLang = new Map<string, FileStat[]>();
 
-  for (const [key, value] of Object.entries(raw)) {
-    if (key === "header" || key === "SUM") {
-      continue;
+    for (const [key, value] of Object.entries(raw)) {
+        if (key === 'header' || key === 'SUM') {
+            continue;
+        }
+
+        const entry = value as ClocFileEntry;
+        const relativePath = key
+            .replace(/\\/g, '/')
+            .replace(`${normalizedFolder}/`, '')
+            .replace(`${normalizedFolder}`, '');
+
+        const file: FileStat = {
+            relativePath: relativePath || (key.split(/[/\\]/).pop() ?? key),
+            absolutePath: key.replace(/\\/g, '/'),
+            code: entry.code,
+            blank: entry.blank,
+            comment: entry.comment,
+        };
+
+        const list = filesByLang.get(entry.language) ?? [];
+        list.push(file);
+        filesByLang.set(entry.language, list);
     }
 
-    const entry = value as ClocFileEntry;
-    const relativePath = key
-      .replace(/\\/g, "/")
-      .replace(`${normalizedFolder}/`, "")
-      .replace(`${normalizedFolder}`, "");
+    const languages: LangStat[] = [...filesByLang.entries()]
+        .map(([name, files]) => {
+            const sortedDesc = [...files].sort((a, b) => b.code - a.code);
+            const sortedAsc = [...files].sort((a, b) => a.code - b.code);
+            return {
+                name,
+                nFiles: files.length,
+                code: files.reduce((sum, f) => sum + f.code, 0),
+                blank: files.reduce((sum, f) => sum + f.blank, 0),
+                comment: files.reduce((sum, f) => sum + f.comment, 0),
+                topFiles: sortedDesc.slice(0, TOP_FILES_PER_LANG),
+                smallestFiles: sortedAsc.slice(0, TOP_FILES_PER_LANG),
+            };
+        })
+        .sort((a, b) => b.code - a.code);
 
-    const file: FileStat = {
-      relativePath: relativePath || (key.split(/[/\\]/).pop() ?? key),
-      absolutePath: key.replace(/\\/g, "/"),
-      code: entry.code,
-      blank: entry.blank,
-      comment: entry.comment,
+    const sum = raw.SUM as {
+        nFiles: number;
+        code: number;
+        blank: number;
+        comment: number;
     };
 
-    const list = filesByLang.get(entry.language) ?? [];
-    list.push(file);
-    filesByLang.set(entry.language, list);
-  }
-
-  const languages: LangStat[] = [...filesByLang.entries()]
-    .map(([name, files]) => {
-      const sortedDesc = [...files].sort((a, b) => b.code - a.code);
-      const sortedAsc = [...files].sort((a, b) => a.code - b.code);
-      return {
-        name,
-        nFiles: files.length,
-        code: files.reduce((sum, f) => sum + f.code, 0),
-        blank: files.reduce((sum, f) => sum + f.blank, 0),
-        comment: files.reduce((sum, f) => sum + f.comment, 0),
-        topFiles: sortedDesc.slice(0, TOP_FILES_PER_LANG),
-        smallestFiles: sortedAsc.slice(0, TOP_FILES_PER_LANG),
-      };
-    })
-    .sort((a, b) => b.code - a.code);
-
-  const sum = raw.SUM as {
-    nFiles: number;
-    code: number;
-    blank: number;
-    comment: number;
-  };
-
-  return {
-    folderName,
-    totalFiles: sum.nFiles,
-    totalCode: sum.code,
-    totalBlank: sum.blank,
-    totalComment: sum.comment,
-    languages,
-    gitChanges,
-    subrepoCount,
-    todos,
-    todoTotal,
-  };
+    return {
+        folderName,
+        totalFiles: sum.nFiles,
+        totalCode: sum.code,
+        totalBlank: sum.blank,
+        totalComment: sum.comment,
+        languages,
+        gitChanges,
+        subrepoCount,
+        todos,
+        todoTotal,
+    };
 }
 
 export interface DashboardWebviewAssets {
-  chartScriptUri: string;
-  cspSource: string;
+    chartScriptUri: string;
+    cspSource: string;
 }
 
 export function getDashboardHtml(
-  data: DashboardData,
-  isDark: boolean,
-  assets: DashboardWebviewAssets,
+    data: DashboardData,
+    isDark: boolean,
+    assets: DashboardWebviewAssets,
 ): string {
-  const theme = getPanelTheme(isDark);
+    const theme = getPanelTheme(isDark);
 
-  const chartColors = data.languages.map(
-    (_, i) => LANG_COLORS[i % LANG_COLORS.length],
-  );
+    const chartColors = data.languages.map((_, i) => LANG_COLORS[i % LANG_COLORS.length]);
 
-  const langCards = data.languages
-    .map((lang, i) => {
-      const pct =
-        data.totalCode > 0
-          ? ((lang.code / data.totalCode) * 100).toFixed(1)
-          : "0";
-      const color = chartColors[i];
+    const langCards = data.languages
+        .map((lang, i) => {
+            const pct = data.totalCode > 0 ? ((lang.code / data.totalCode) * 100).toFixed(1) : '0';
+            const color = chartColors[i];
 
-      const fileRows = (files: FileStat[]) =>
-        files
-          .map(
-            (file, rank) => `
+            const fileRows = (files: FileStat[]) =>
+                files
+                    .map(
+                        (file, rank) => `
           <tr>
             <td class="rank">${rank + 1}</td>
             <td class="file-path">
@@ -171,12 +166,12 @@ export function getDashboardHtml(
             <td class="num col-code">${file.code.toLocaleString()}</td>
             <td class="num col-other muted">${(file.blank + file.comment).toLocaleString()}</td>
           </tr>`,
-          )
-          .join("");
+                    )
+                    .join('');
 
-      const renderTable = (files: FileStat[], title: string) =>
-        files.length > 0
-          ? `
+            const renderTable = (files: FileStat[], title: string) =>
+                files.length > 0
+                    ? `
           <div class="file-table-block">
             <h4 class="file-table-title">${title}</h4>
             <table class="top-files">
@@ -191,18 +186,18 @@ export function getDashboardHtml(
               <tbody>${fileRows(files)}</tbody>
             </table>
           </div>`
-          : "";
+                    : '';
 
-      const fileTables =
-        lang.topFiles.length > 0 || lang.smallestFiles.length > 0
-          ? `
+            const fileTables =
+                lang.topFiles.length > 0 || lang.smallestFiles.length > 0
+                    ? `
           <div class="file-tables">
-            ${renderTable(lang.topFiles, "Top 5 largest")}
-            ${renderTable(lang.smallestFiles, "Top 5 smallest")}
+            ${renderTable(lang.topFiles, 'Top 5 largest')}
+            ${renderTable(lang.smallestFiles, 'Top 5 smallest')}
           </div>`
-          : "";
+                    : '';
 
-      return `
+            return `
         <section class="lang-card" style="--lang-color: ${color}">
           <header class="lang-header">
             <div class="lang-title">
@@ -224,37 +219,36 @@ export function getDashboardHtml(
           </div>
           ${fileTables}
         </section>`;
-    })
-    .join("");
+        })
+        .join('');
 
-  const git = data.gitChanges;
-  const netClass = (net: number) =>
-    net > 0 ? "net-positive" : net < 0 ? "net-negative" : "net-zero";
-  const formatDelta = (value: number) =>
-    `${value >= 0 ? "+" : ""}${value.toLocaleString()}`;
+    const git = data.gitChanges;
+    const netClass = (net: number) =>
+        net > 0 ? 'net-positive' : net < 0 ? 'net-negative' : 'net-zero';
+    const formatDelta = (value: number) => `${value >= 0 ? '+' : ''}${value.toLocaleString()}`;
 
-  const subrepoCard =
-    data.subrepoCount > 0
-      ? `<div class="stat-card subrepo">
+    const subrepoCard =
+        data.subrepoCount > 0
+            ? `<div class="stat-card subrepo">
         <div class="label">Subrepos</div>
         <div class="value">${data.subrepoCount}</div>
       </div>`
-      : "";
+            : '';
 
-  const todoCard = `<div class="stat-card">
+    const todoCard = `<div class="stat-card">
       <div class="label">TODOs</div>
       <div class="value">${data.todoTotal.toLocaleString()}</div>
     </div>`;
 
-  const todoSection =
-    data.todos.length > 0
-      ? `
+    const todoSection =
+        data.todos.length > 0
+            ? `
   <section class="section-block">
     <div class="todo-card">
       <h2 class="section-title">Open TODOs${
-        data.todoTotal > data.todos.length
-          ? ` <span class="todo-cap">(showing ${data.todos.length} of ${data.todoTotal})</span>`
-          : ""
+          data.todoTotal > data.todos.length
+              ? ` <span class="todo-cap">(showing ${data.todos.length} of ${data.todoTotal})</span>`
+              : ''
       }</h2>
       <table class="top-files todo-files">
         <thead>
@@ -266,8 +260,8 @@ export function getDashboardHtml(
         </thead>
         <tbody>
           ${data.todos
-            .map(
-              (todo) => `
+              .map(
+                  (todo) => `
           <tr>
             <td class="col-tag"><span class="todo-tag todo-tag-${todo.tag.toLowerCase()}">${todo.tag}</span></td>
             <td class="file-path">
@@ -275,21 +269,21 @@ export function getDashboardHtml(
             </td>
             <td class="todo-preview" title="${escapeHtml(todo.text)}">${escapeHtml(todo.text)}</td>
           </tr>`,
-            )
-            .join("")}
+              )
+              .join('')}
         </tbody>
       </table>
     </div>
   </section>`
-      : `
+            : `
   <section class="section-block">
     <div class="todo-empty">No TODO/FIXME comments found.</div>
   </section>`;
 
-  const uncommittedFiles = git.uncommittedFiles ?? [];
-  const uncommittedTable =
-    uncommittedFiles.length > 0
-      ? `
+    const uncommittedFiles = git.uncommittedFiles ?? [];
+    const uncommittedTable =
+        uncommittedFiles.length > 0
+            ? `
     <div class="uncommitted-card">
       <h3 class="uncommitted-title">Uncommitted files</h3>
       <table class="top-files uncommitted-files">
@@ -303,8 +297,8 @@ export function getDashboardHtml(
         </thead>
         <tbody>
           ${uncommittedFiles
-            .map(
-              (file) => `
+              .map(
+                  (file) => `
           <tr>
             <td class="file-path">
               <button type="button" class="file-link" data-path="${escapeHtml(file.absolutePath)}" title="${escapeHtml(file.relativePath)}">${escapeHtml(file.relativePath)}</button>
@@ -313,17 +307,17 @@ export function getDashboardHtml(
             <td class="num col-other delete-num">−${file.deleted.toLocaleString()}</td>
             <td class="num col-other ${netClass(file.net)}">${formatDelta(file.net)}</td>
           </tr>`,
-            )
-            .join("")}
+              )
+              .join('')}
         </tbody>
       </table>
     </div>`
-      : git.uncommittedNet === 0
-        ? `<div class="uncommitted-empty">Working tree clean — no staged or unstaged line changes.</div>`
-        : "";
+            : git.uncommittedNet === 0
+              ? `<div class="uncommitted-empty">Working tree clean — no staged or unstaged line changes.</div>`
+              : '';
 
-  const gitSection = git.available
-    ? `
+    const gitSection = git.available
+        ? `
   <section class="section-block">
     <div class="stats">
       <div class="stat-card add">
@@ -350,16 +344,16 @@ export function getDashboardHtml(
       <div class="git-chart-wrap">
         <canvas id="git-chart"></canvas>
       </div>
-      <p class="git-chart-note">Committed lines from <code>git log --numstat</code> scoped to this folder. Net uncommitted = index + working tree (staged + unstaged diff).${data.subrepoCount > 0 ? ` Includes ${data.subrepoCount} subrepo(s).` : ""}</p>
+      <p class="git-chart-note">Committed lines from <code>git log --numstat</code> scoped to this folder. Net uncommitted = index + working tree (staged + unstaged diff).${data.subrepoCount > 0 ? ` Includes ${data.subrepoCount} subrepo(s).` : ''}</p>
     </div>
   </section>`
-    : `
+        : `
   <section class="section-block">
     <h2>Git activity</h2>
-    <div class="git-unavailable">${escapeHtml(git.message ?? "Git history unavailable")}</div>
+    <div class="git-unavailable">${escapeHtml(git.message ?? 'Git history unavailable')}</div>
   </section>`;
 
-  const dashboardStyles = `
+    const dashboardStyles = `
     ${panelContentStyles(theme)}
 
     .git-unavailable {
@@ -757,14 +751,14 @@ export function getDashboardHtml(
     }
   `;
 
-  const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
+    const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
 
-  return panelDocument({
-    title: "Code Dashboard",
-    csp: panelWebviewCsp(assets.cspSource),
-    styles: dashboardStyles,
-    body: `
-  ${renderPanelHeader("Code Dashboard", escapeHtml(data.folderName), reloadBtn)}
+    return panelDocument({
+        title: 'Code Dashboard',
+        csp: panelWebviewCsp(assets.cspSource),
+        styles: dashboardStyles,
+        body: `
+  ${renderPanelHeader('Code Dashboard', escapeHtml(data.folderName), reloadBtn)}
 
   <div class="stats">
     <div class="stat-card highlight">
@@ -801,20 +795,18 @@ export function getDashboardHtml(
     <div class="legend-card">
       <div class="legend-list">
         ${data.languages
-          .map((lang, i) => {
-            const pct =
-              data.totalCode > 0
-                ? ((lang.code / data.totalCode) * 100).toFixed(1)
-                : "0";
-            return `
+            .map((lang, i) => {
+                const pct =
+                    data.totalCode > 0 ? ((lang.code / data.totalCode) * 100).toFixed(1) : '0';
+                return `
           <div class="legend-item">
             <span class="legend-dot" style="background: ${chartColors[i]}"></span>
             <span class="legend-name">${escapeHtml(lang.name)}</span>
             <span class="legend-files">${lang.nFiles} files</span>
             <span class="legend-code">${lang.code.toLocaleString()} (${pct}%)</span>
           </div>`;
-          })
-          .join("")}
+            })
+            .join('')}
       </div>
     </div>
   </div>
@@ -970,5 +962,5 @@ export function getDashboardHtml(
     }
   </script>
     `,
-  });
+    });
 }

@@ -1,43 +1,43 @@
-import { escapeHtml } from "../../shared/html";
+import { escapeHtml } from '../../shared/html';
 import {
-  PANEL_CSP_CDN,
-  panelCompactToolbarStyles,
-  panelDocument,
-  panelLoadingStyles,
-  panelToolbarBtnStyles,
-  reloadPanelScript,
-} from "../../shared/panel";
-import { getPanelTheme, PanelTheme } from "../../shared/theme";
-import { CodeGraphData } from "./types";
+    PANEL_CSP_CDN,
+    panelCompactToolbarStyles,
+    panelDocument,
+    panelLoadingStyles,
+    panelToolbarBtnStyles,
+    reloadPanelScript,
+} from '../../shared/panel';
+import { getPanelTheme, PanelTheme } from '../../shared/theme';
+import { CodeGraphData } from './types';
 
 interface GraphTheme extends PanelTheme {
-  dep: string;
-  depSoft: string;
-  dependent: string;
-  dependentSoft: string;
+    dep: string;
+    depSoft: string;
+    dependent: string;
+    dependentSoft: string;
 }
 
 function getGraphTheme(isDark: boolean): GraphTheme {
-  const base = getPanelTheme(isDark);
-  return isDark
-    ? {
-        ...base,
-        dep: "#06b6d4",
-        depSoft: "rgba(6, 182, 212, 0.2)",
-        dependent: "#22c55e",
-        dependentSoft: "rgba(34, 197, 94, 0.2)",
-      }
-    : {
-        ...base,
-        dep: "#0891b2",
-        depSoft: "rgba(8, 145, 178, 0.12)",
-        dependent: "#16a34a",
-        dependentSoft: "rgba(22, 163, 74, 0.12)",
-      };
+    const base = getPanelTheme(isDark);
+    return isDark
+        ? {
+              ...base,
+              dep: '#06b6d4',
+              depSoft: 'rgba(6, 182, 212, 0.2)',
+              dependent: '#22c55e',
+              dependentSoft: 'rgba(34, 197, 94, 0.2)',
+          }
+        : {
+              ...base,
+              dep: '#0891b2',
+              depSoft: 'rgba(8, 145, 178, 0.12)',
+              dependent: '#16a34a',
+              dependentSoft: 'rgba(22, 163, 74, 0.12)',
+          };
 }
 
 function graphStyles(t: GraphTheme): string {
-  return `
+    return `
     ${panelCompactToolbarStyles(t)}
     ${panelToolbarBtnStyles(t)}
     ${panelLoadingStyles(t)}
@@ -129,16 +129,16 @@ function graphStyles(t: GraphTheme): string {
 }
 
 export function getCodeGraphLoadingHtml(
-  relativePath: string,
-  isDark: boolean,
-  status = "Analyzing imports…",
+    relativePath: string,
+    isDark: boolean,
+    status = 'Analyzing imports…',
 ): string {
-  const t = getGraphTheme(isDark);
+    const t = getGraphTheme(isDark);
 
-  return panelDocument({
-    title: "Code Graph",
-    styles: graphStyles(t),
-    body: `
+    return panelDocument({
+        title: 'Code Graph',
+        styles: graphStyles(t),
+        body: `
   <div class="toolbar">
     <div class="toolbar-title">
       <h1>Code Graph</h1>
@@ -168,23 +168,23 @@ export function getCodeGraphLoadingHtml(
     });
   </script>
     `,
-  });
+    });
 }
 
 export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
-  const t = getGraphTheme(isDark);
+    const t = getGraphTheme(isDark);
 
-  const legend = `
+    const legend = `
     <span class="legend-item dependent">Dependents ↑</span>
     <span class="legend-item current">Current file</span>
     <span class="legend-item dependency">Dependencies ↓</span>
   `;
 
-  return panelDocument({
-    title: "Code Graph",
-    csp: PANEL_CSP_CDN,
-    styles: graphStyles(t),
-    body: `
+    return panelDocument({
+        title: 'Code Graph',
+        csp: PANEL_CSP_CDN,
+        styles: graphStyles(t),
+        body: `
   <div class="toolbar">
     <div class="toolbar-title">
       <h1>Code Graph</h1>
@@ -580,5 +580,5 @@ export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
     network.once("initRedraw", fitGraph);
   </script>
     `,
-  });
+    });
 }

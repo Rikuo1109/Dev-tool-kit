@@ -1,304 +1,317 @@
 {
-  "name": "kyo-tools",
-  "displayName": "kyo-tools",
-  "description": "Code dashboard, dead code explorer, organize imports, code graph, code analyze, and AI template init",
-  "version": "0.0.1",
-  "publisher": "kyoriku",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Rikuo1109/Dev-tool-kit.git"
-  },
-  "engines": {
-    "vscode": "^1.105.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "main": "./dist/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "kyo-tools.initAiTemplate",
-        "title": "Init AI Template",
-        "category": "Kyo Tools"
-      },
-      {
-        "command": "code-dashboard.open",
-        "title": "Code Dashboard",
-        "category": "Kyo Tools"
-      },
-      {
-        "command": "kyo-tools.organizeImports",
-        "title": "Organize Imports",
-        "category": "Kyo Tools"
-      },
-      {
-        "command": "kyo-tools.codeGraph",
-        "title": "Code Graph",
-        "category": "Kyo Tools"
-      },
-      {
-        "command": "kyo-tools.codeAnalyze",
-        "title": "Code Analyze",
-        "category": "Kyo Tools"
-      },
-      {
-        "command": "kyo-tools.deadCodeExplorer",
-        "title": "Dead Code Explorer",
-        "category": "Kyo Tools"
-      },
-      {
-        "command": "kyo-tools.preMergeReview",
-        "title": "Pre-Merge Review",
-        "category": "Kyo Tools"
-      }
-    ],
-    "configuration": {
-      "title": "Kyo Tools",
-      "properties": {
-        "kyo-tools.codeAnalyze.entryGlobs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [
-            "**/main.{ts,tsx,js,jsx}",
-            "**/index.{ts,tsx,js,jsx}",
-            "**/App.{tsx,jsx}",
-            "**/*.config.{ts,js,mjs,cjs}",
-            "**/vite.config.*",
-            "**/next.config.*",
-            "**/pages/_app.{tsx,jsx}",
-            "**/app/layout.{tsx,jsx}",
-            "**/main.py",
-            "**/__main__.py",
-            "**/app.py",
-            "**/manage.py",
-            "**/wsgi.py",
-            "**/asgi.py",
-            "**/Main.java",
-            "**/*Application.java"
-          ],
-          "description": "Glob patterns for entry points excluded from unused-file detection."
-        },
-        "kyo-tools.codeAnalyze.excludeGlobs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [
-            "**/*.test.{ts,tsx,js,jsx}",
-            "**/*.spec.{ts,tsx,js,jsx}",
-            "**/__tests__/**",
-            "**/__mocks__/**",
-            "**/test_*.py",
-            "**/*_test.py",
-            "**/tests/**",
-            "**/*Test.java",
-            "**/test/**"
-          ],
-          "description": "Glob patterns excluded from code analyze."
-        },
-        "kyo-tools.codeAnalyze.duplicateMinLines": {
-          "type": "number",
-          "default": 6,
-          "minimum": 3,
-          "description": "Minimum non-empty lines for duplicate code detection."
-        },
-        "kyo-tools.codeAnalyze.largeFileLoc": {
-          "type": "number",
-          "default": 300,
-          "minimum": 50,
-          "description": "Warn when a file exceeds this many non-empty lines."
-        },
-        "kyo-tools.codeAnalyze.largeFunctionLoc": {
-          "type": "number",
-          "default": 80,
-          "minimum": 10,
-          "description": "Warn when a function body exceeds this many non-empty lines."
-        },
-        "kyo-tools.codeAnalyze.largeFunctionParams": {
-          "type": "number",
-          "default": 5,
-          "minimum": 2,
-          "description": "Warn when a function has more than this many parameters."
-        },
-        "kyo-tools.deadCodeExplorer.entryGlobs": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [
-            "**/mobile.{js,jsx,ts,tsx}",
-            "**/App/mobile.{tsx,jsx,ts,js}",
-            "**/index.{js,jsx,ts,tsx}",
-            "**/main.{js,jsx,ts,tsx}"
-          ],
-          "description": "Extra entry globs merged with codeAnalyze.entryGlobs for reachability."
-        },
-        "kyo-tools.deadCodeExplorer.ignoreGlobs": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [
-            "**/node_modules/**",
-            "**/*.min.js",
-            "**/*.{test,spec}.{js,jsx,ts,tsx}",
-            "**/*.stories.{js,jsx,ts,tsx}",
-            "**/__tests__/**",
-            "**/__mocks__/**",
-            "**/.eslintrc*",
-            "**/prettier*",
-            "**/generate-react-cli/**",
-            "**/*TemplateName*"
-          ],
-          "description": "Path globs classified out of primary dead Files (bucket unknown)."
-        },
-        "kyo-tools.deadCodeExplorer.vendorGlobs": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [
-            "public/**/tinymce*/**",
-            "public/assets/**",
-            "**/vendor/**"
-          ],
-          "description": "Path globs classified as vendor."
-        },
-        "kyo-tools.deadCodeExplorer.toolingGlobs": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [
-            "tools/**",
-            "scripts/**",
-            "**/webpack*.{js,ts,cjs,mjs}",
-            "**/vite.config.*",
-            "**/jest.config.*",
-            "**/babel.config.*",
-            "**/*.config.{js,cjs,mjs,ts}"
-          ],
-          "description": "Path globs classified as tooling."
-        },
-        "kyo-tools.deadCodeExplorer.ambientGlobs": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [
-            "**/*.d.ts",
-            "**/react-app-env.d.ts"
-          ],
-          "description": "Path globs classified as ambient types."
-        },
-        "kyo-tools.deadCodeExplorer.primaryBuckets": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "dead",
-              "likely-dead",
-              "runtime",
-              "entry",
-              "tooling",
-              "ambient",
-              "vendor",
-              "unknown"
-            ]
-          },
-          "default": ["dead", "likely-dead"],
-          "description": "Buckets shown in the primary Files list."
-        },
-        "kyo-tools.deadCodeExplorer.discoverBundlerEntries": {
-          "type": "boolean",
-          "default": true,
-          "description": "Parse webpack/vite/package.json for additional entry points."
-        }
-      }
+    "name": "kyo-tools",
+    "displayName": "kyo-tools",
+    "description": "Code dashboard, dead code explorer, organize imports, code graph, code analyze, and AI template init",
+    "version": "0.0.1",
+    "publisher": "kyoriku",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Rikuo1109/Dev-tool-kit.git"
     },
-    "menus": {
-      "commandPalette": [
-        {
-          "command": "kyo-tools.initAiTemplate",
-          "when": "workspaceFolderCount != 0"
+    "engines": {
+        "vscode": "^1.105.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "kyo-tools.initAiTemplate",
+                "title": "Init AI Template",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "code-dashboard.open",
+                "title": "Code Dashboard",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.organizeImports",
+                "title": "Organize Imports",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.codeGraph",
+                "title": "Code Graph",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.codeAnalyze",
+                "title": "Code Analyze",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.deadCodeExplorer",
+                "title": "Dead Code Explorer",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.preMergeReview",
+                "title": "Pre-Merge Review",
+                "category": "Kyo Tools"
+            }
+        ],
+        "configuration": {
+            "title": "Kyo Tools",
+            "properties": {
+                "kyo-tools.codeAnalyze.entryGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/main.{ts,tsx,js,jsx}",
+                        "**/index.{ts,tsx,js,jsx}",
+                        "**/App.{tsx,jsx}",
+                        "**/*.config.{ts,js,mjs,cjs}",
+                        "**/vite.config.*",
+                        "**/next.config.*",
+                        "**/pages/_app.{tsx,jsx}",
+                        "**/app/layout.{tsx,jsx}",
+                        "**/main.py",
+                        "**/__main__.py",
+                        "**/app.py",
+                        "**/manage.py",
+                        "**/wsgi.py",
+                        "**/asgi.py",
+                        "**/Main.java",
+                        "**/*Application.java"
+                    ],
+                    "description": "Glob patterns for entry points excluded from unused-file detection."
+                },
+                "kyo-tools.codeAnalyze.excludeGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/*.test.{ts,tsx,js,jsx}",
+                        "**/*.spec.{ts,tsx,js,jsx}",
+                        "**/__tests__/**",
+                        "**/__mocks__/**",
+                        "**/test_*.py",
+                        "**/*_test.py",
+                        "**/tests/**",
+                        "**/*Test.java",
+                        "**/test/**"
+                    ],
+                    "description": "Glob patterns excluded from code analyze."
+                },
+                "kyo-tools.codeAnalyze.duplicateMinLines": {
+                    "type": "number",
+                    "default": 6,
+                    "minimum": 3,
+                    "description": "Minimum non-empty lines for duplicate code detection."
+                },
+                "kyo-tools.codeAnalyze.largeFileLoc": {
+                    "type": "number",
+                    "default": 300,
+                    "minimum": 50,
+                    "description": "Warn when a file exceeds this many non-empty lines."
+                },
+                "kyo-tools.codeAnalyze.largeFunctionLoc": {
+                    "type": "number",
+                    "default": 80,
+                    "minimum": 10,
+                    "description": "Warn when a function body exceeds this many non-empty lines."
+                },
+                "kyo-tools.codeAnalyze.largeFunctionParams": {
+                    "type": "number",
+                    "default": 5,
+                    "minimum": 2,
+                    "description": "Warn when a function has more than this many parameters."
+                },
+                "kyo-tools.deadCodeExplorer.entryGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/mobile.{js,jsx,ts,tsx}",
+                        "**/App/mobile.{tsx,jsx,ts,js}",
+                        "**/index.{js,jsx,ts,tsx}",
+                        "**/main.{js,jsx,ts,tsx}"
+                    ],
+                    "description": "Extra entry globs merged with codeAnalyze.entryGlobs for reachability."
+                },
+                "kyo-tools.deadCodeExplorer.ignoreGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/node_modules/**",
+                        "**/*.min.js",
+                        "**/*.{test,spec}.{js,jsx,ts,tsx}",
+                        "**/*.stories.{js,jsx,ts,tsx}",
+                        "**/__tests__/**",
+                        "**/__mocks__/**",
+                        "**/.eslintrc*",
+                        "**/prettier*",
+                        "**/generate-react-cli/**",
+                        "**/*TemplateName*"
+                    ],
+                    "description": "Path globs classified out of primary dead Files (bucket unknown)."
+                },
+                "kyo-tools.deadCodeExplorer.vendorGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "public/**/tinymce*/**",
+                        "public/assets/**",
+                        "**/vendor/**"
+                    ],
+                    "description": "Path globs classified as vendor."
+                },
+                "kyo-tools.deadCodeExplorer.toolingGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "tools/**",
+                        "scripts/**",
+                        "**/webpack*.{js,ts,cjs,mjs}",
+                        "**/vite.config.*",
+                        "**/jest.config.*",
+                        "**/babel.config.*",
+                        "**/*.config.{js,cjs,mjs,ts}"
+                    ],
+                    "description": "Path globs classified as tooling."
+                },
+                "kyo-tools.deadCodeExplorer.ambientGlobs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/*.d.ts",
+                        "**/react-app-env.d.ts"
+                    ],
+                    "description": "Path globs classified as ambient types."
+                },
+                "kyo-tools.deadCodeExplorer.primaryBuckets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "dead",
+                            "likely-dead",
+                            "runtime",
+                            "entry",
+                            "tooling",
+                            "ambient",
+                            "vendor",
+                            "unknown"
+                        ]
+                    },
+                    "default": [
+                        "dead",
+                        "likely-dead"
+                    ],
+                    "description": "Buckets shown in the primary Files list."
+                },
+                "kyo-tools.deadCodeExplorer.discoverBundlerEntries": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Parse webpack/vite/package.json for additional entry points."
+                }
+            }
         },
-        {
-          "command": "code-dashboard.open",
-          "when": "workspaceFolderCount != 0"
-        },
-        {
-          "command": "kyo-tools.organizeImports",
-          "when": "false"
-        },
-        {
-          "command": "kyo-tools.codeGraph",
-          "when": "workspaceFolderCount != 0"
-        },
-        {
-          "command": "kyo-tools.codeAnalyze",
-          "when": "workspaceFolderCount != 0"
-        },
-        {
-          "command": "kyo-tools.deadCodeExplorer",
-          "when": "workspaceFolderCount != 0"
-        },
-        {
-          "command": "kyo-tools.preMergeReview",
-          "when": "workspaceFolderCount != 0"
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "kyo-tools.initAiTemplate",
+                    "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "code-dashboard.open",
+                    "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.organizeImports",
+                    "when": "false"
+                },
+                {
+                    "command": "kyo-tools.codeGraph",
+                    "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.codeAnalyze",
+                    "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.deadCodeExplorer",
+                    "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.preMergeReview",
+                    "when": "workspaceFolderCount != 0"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "code-dashboard.open",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@1"
+                },
+                {
+                    "command": "kyo-tools.codeAnalyze",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@2"
+                },
+                {
+                    "command": "kyo-tools.deadCodeExplorer",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@3"
+                },
+                {
+                    "command": "kyo-tools.organizeImports",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@4"
+                },
+                {
+                    "command": "kyo-tools.codeGraph",
+                    "when": "!explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@1"
+                }
+            ]
         }
-      ],
-      "explorer/context": [
-        {
-          "command": "code-dashboard.open",
-          "when": "explorerResourceIsFolder",
-          "group": "2_z_kyoTools@1"
-        },
-        {
-          "command": "kyo-tools.codeAnalyze",
-          "when": "explorerResourceIsFolder",
-          "group": "2_z_kyoTools@2"
-        },
-        {
-          "command": "kyo-tools.deadCodeExplorer",
-          "when": "explorerResourceIsFolder",
-          "group": "2_z_kyoTools@3"
-        },
-        {
-          "command": "kyo-tools.organizeImports",
-          "when": "explorerResourceIsFolder",
-          "group": "2_z_kyoTools@4"
-        },
-        {
-          "command": "kyo-tools.codeGraph",
-          "when": "!explorerResourceIsFolder",
-          "group": "2_z_kyoTools@1"
-        }
-      ]
+    },
+    "scripts": {
+        "vscode:prepublish": "yarn run package",
+        "compile": "webpack",
+        "watch": "webpack --watch",
+        "package": "webpack --mode production --devtool hidden-source-map",
+        "compile-tests": "tsc -p . --outDir out",
+        "watch-tests": "tsc -p . -w --outDir out",
+        "pretest": "yarn run compile-tests && yarn run compile && yarn run lint",
+        "lint": "eslint src",
+        "test": "vscode-test",
+        "vsix": "yarn package && npx @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license",
+        "install:local": "yarn vsix && node scripts/install-local.cjs"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.10",
+        "@types/node": "24.x",
+        "@types/vscode": "^1.105.0",
+        "@vscode/test-cli": "^0.0.15",
+        "@vscode/test-electron": "^3.0.0",
+        "chart.js": "^4.5.1",
+        "copy-webpack-plugin": "^14.0.0",
+        "eslint": "^10.5.0",
+        "ts-loader": "^9.6.2",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.61.1",
+        "webpack": "^5.107.2",
+        "webpack-cli": "^7.0.3"
+    },
+    "overrides": {
+        "diff": "^8.0.4",
+        "serialize-javascript": "^7.0.6"
     }
-  },
-  "scripts": {
-    "vscode:prepublish": "yarn run package",
-    "compile": "webpack",
-    "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "yarn run compile-tests && yarn run compile && yarn run lint",
-    "lint": "eslint src",
-    "test": "vscode-test",
-    "vsix": "yarn package && npx @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license",
-    "install:local": "yarn vsix && node scripts/install-local.cjs"
-  },
-  "devDependencies": {
-    "@types/mocha": "^10.0.10",
-    "@types/node": "24.x",
-    "@types/vscode": "^1.105.0",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0",
-    "chart.js": "^4.5.1",
-    "copy-webpack-plugin": "^14.0.0",
-    "eslint": "^10.5.0",
-    "ts-loader": "^9.6.2",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.1",
-    "webpack": "^5.107.2",
-    "webpack-cli": "^7.0.3"
-  },
-  "overrides": {
-    "diff": "^8.0.4",
-    "serialize-javascript": "^7.0.6"
-  }
 }

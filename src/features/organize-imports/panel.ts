@@ -1,109 +1,97 @@
-import * as vscode from "vscode";
-import { isDarkTheme } from "../../shared/html";
-import { openFileInEditor } from "../../shared/openInEditor";
-import {
-  panelContentStyles,
-  panelDocument,
-  renderPanelHeader,
-} from "../../shared/panel";
-import { getPanelTheme } from "../../shared/theme";
+import * as vscode from 'vscode';
+import { isDarkTheme } from '../../shared/html';
+import { openFileInEditor } from '../../shared/openInEditor';
+import { panelContentStyles, panelDocument, renderPanelHeader } from '../../shared/panel';
+import { getPanelTheme } from '../../shared/theme';
 
 export interface FileOrganizeResult {
-  relativePath: string;
-  absolutePath: string;
-  status: "updated" | "unchanged" | "failed";
-  error?: string;
+    relativePath: string;
+    absolutePath: string;
+    status: 'updated' | 'unchanged' | 'failed';
+    error?: string;
 }
 
 export interface OrganizeReport {
-  folderName: string;
-  total: number;
-  updated: number;
-  unchanged: number;
-  failed: number;
-  cancelled: boolean;
-  files: FileOrganizeResult[];
-  durationMs: number;
-  errorSummary: { message: string; count: number }[];
-}
-
-export class OrganizeImportsPanel {
-  private readonly panel: vscode.WebviewPanel;
-  private readonly cancelSource = new vscode.CancellationTokenSource();
-
-  private constructor(
-    panel: vscode.WebviewPanel,
-    folderName: string,
-    total: number,
-    isDark: boolean,
-  ) {
-    this.panel = panel;
-    this.panel.webview.html = getPanelHtml(folderName, total, isDark);
-    this.panel.webview.onDidReceiveMessage(async (message) => {
-      if (message.type === "cancel") {
-        this.cancelSource.cancel();
-        return;
-      }
-
-      if (message.type === "open" && typeof message.path === "string") {
-        await openFileInEditor(message.path);
-      }
-    });
-  }
-
-  static open(
-    folderName: string,
-    total: number,
-    isDark: boolean,
-  ): OrganizeImportsPanel {
-    const panel = vscode.window.createWebviewPanel(
-      "kyoToolsOrganizeImports",
-      `Organize Imports — ${folderName}`,
-      vscode.ViewColumn.One,
-      { enableScripts: true, retainContextWhenHidden: true },
-    );
-
-    return new OrganizeImportsPanel(panel, folderName, total, isDark);
-  }
-
-  get token(): vscode.CancellationToken {
-    return this.cancelSource.token;
-  }
-
-  onProgress(state: {
-    current: number;
+    folderName: string;
     total: number;
-    file: string;
     updated: number;
     unchanged: number;
     failed: number;
-  }): void {
-    this.panel.webview.postMessage({ type: "progress", ...state });
-  }
-
-  onComplete(report: OrganizeReport): void {
-    this.panel.webview.postMessage({ type: "complete", report });
-    this.panel.title = report.cancelled
-      ? `Organize Imports — Cancelled`
-      : `Organize Imports — Done`;
-  }
-
-  dispose(): void {
-    this.panel.dispose();
-    this.cancelSource.dispose();
-  }
+    cancelled: boolean;
+    files: FileOrganizeResult[];
+    durationMs: number;
+    errorSummary: { message: string; count: number }[];
 }
 
-function getPanelHtml(
-  folderName: string,
-  total: number,
-  isDark: boolean,
-): string {
-  const t = getPanelTheme(isDark);
+export class OrganizeImportsPanel {
+    private readonly panel: vscode.WebviewPanel;
+    private readonly cancelSource = new vscode.CancellationTokenSource();
 
-  return panelDocument({
-    title: "Organize Imports",
-    styles: `
+    private constructor(
+        panel: vscode.WebviewPanel,
+        folderName: string,
+        total: number,
+        isDark: boolean,
+    ) {
+        this.panel = panel;
+        this.panel.webview.html = getPanelHtml(folderName, total, isDark);
+        this.panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'cancel') {
+                this.cancelSource.cancel();
+                return;
+            }
+
+            if (message.type === 'open' && typeof message.path === 'string') {
+                await openFileInEditor(message.path);
+            }
+        });
+    }
+
+    static open(folderName: string, total: number, isDark: boolean): OrganizeImportsPanel {
+        const panel = vscode.window.createWebviewPanel(
+            'kyoToolsOrganizeImports',
+            `Organize Imports — ${folderName}`,
+            vscode.ViewColumn.One,
+            { enableScripts: true, retainContextWhenHidden: true },
+        );
+
+        return new OrganizeImportsPanel(panel, folderName, total, isDark);
+    }
+
+    get token(): vscode.CancellationToken {
+        return this.cancelSource.token;
+    }
+
+    onProgress(state: {
+        current: number;
+        total: number;
+        file: string;
+        updated: number;
+        unchanged: number;
+        failed: number;
+    }): void {
+        this.panel.webview.postMessage({ type: 'progress', ...state });
+    }
+
+    onComplete(report: OrganizeReport): void {
+        this.panel.webview.postMessage({ type: 'complete', report });
+        this.panel.title = report.cancelled
+            ? `Organize Imports — Cancelled`
+            : `Organize Imports — Done`;
+    }
+
+    dispose(): void {
+        this.panel.dispose();
+        this.cancelSource.dispose();
+    }
+}
+
+function getPanelHtml(folderName: string, total: number, isDark: boolean): string {
+    const t = getPanelTheme(isDark);
+
+    return panelDocument({
+        title: 'Organize Imports',
+        styles: `
       ${panelContentStyles(t)}
 
       .error-summary {
@@ -140,8 +128,8 @@ function getPanelHtml(
       .results { display: none; }
       .results.visible { display: block; }
     `,
-    body: `
-  ${renderPanelHeader("Organize Imports", '<span id="folder-name"></span>')}
+        body: `
+  ${renderPanelHeader('Organize Imports', '<span id="folder-name"></span>')}
 
   <div id="banner" class="banner running">
     <span class="spinner inline" id="spinner"></span>
@@ -358,5 +346,5 @@ function getPanelHtml(
     }
   </script>
     `,
-  });
+    });
 }

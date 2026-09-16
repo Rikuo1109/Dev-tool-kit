@@ -1,34 +1,34 @@
-import { escapeHtml } from "./html";
-import { PanelTheme } from "./theme";
+import { escapeHtml } from './html';
+import { PanelTheme } from './theme';
 
 export const PANEL_CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';";
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';";
 
 export const PANEL_CSP_CDN =
-  "default-src 'none'; style-src 'unsafe-inline' https://cdn.jsdelivr.net; script-src https://cdn.jsdelivr.net 'unsafe-inline'; img-src data:;";
+    "default-src 'none'; style-src 'unsafe-inline' https://cdn.jsdelivr.net; script-src https://cdn.jsdelivr.net 'unsafe-inline'; img-src data:;";
 
 export function panelWebviewCsp(cspSource: string): string {
-  return `default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src ${cspSource} 'unsafe-inline'; img-src data:;`;
+    return `default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src ${cspSource} 'unsafe-inline'; img-src data:;`;
 }
 
 export interface PanelDocumentOptions {
-  title: string;
-  csp?: string;
-  styles: string;
-  body: string;
-  bodyClass?: string;
-  bodyExtra?: string;
+    title: string;
+    csp?: string;
+    styles: string;
+    body: string;
+    bodyClass?: string;
+    bodyExtra?: string;
 }
 
 export function panelDocument(options: PanelDocumentOptions): string {
-  const bodyAttrs = [
-    options.bodyClass ? `class="${options.bodyClass}"` : "",
-    options.bodyExtra ? `style="${options.bodyExtra}"` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    const bodyAttrs = [
+        options.bodyClass ? `class="${options.bodyClass}"` : '',
+        options.bodyExtra ? `style="${options.bodyExtra}"` : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
 
-  return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -46,13 +46,13 @@ export function panelDocument(options: PanelDocumentOptions): string {
 }
 
 export function panelBaseStyles(
-  t: PanelTheme,
-  options: { padding?: string; minHeight?: string } = {},
+    t: PanelTheme,
+    options: { padding?: string; minHeight?: string } = {},
 ): string {
-  const padding = options.padding ?? "10px 12px";
-  const minHeight = options.minHeight ?? "100vh";
+    const padding = options.padding ?? '10px 12px';
+    const minHeight = options.minHeight ?? '100vh';
 
-  return `
+    return `
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
@@ -67,7 +67,7 @@ export function panelBaseStyles(
 }
 
 export function panelHeaderStyles(t: PanelTheme): string {
-  return `
+    return `
     .header {
       display: flex;
       align-items: flex-start;
@@ -93,7 +93,7 @@ export function panelHeaderStyles(t: PanelTheme): string {
 }
 
 export function panelToolbarBtnStyles(t: PanelTheme): string {
-  return `
+    return `
     .toolbar-btn,
     .btn {
       appearance: none;
@@ -137,7 +137,7 @@ export function panelToolbarBtnStyles(t: PanelTheme): string {
 }
 
 export function panelLoadingStyles(t: PanelTheme): string {
-  return `
+    return `
     .loading {
       display: flex;
       flex-direction: column;
@@ -172,8 +172,8 @@ export function panelLoadingStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelStatGridStyles(minWidth = "110px"): string {
-  return `
+export function panelStatGridStyles(minWidth = '110px'): string {
+    return `
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(${minWidth}, 1fr));
@@ -184,7 +184,7 @@ export function panelStatGridStyles(minWidth = "110px"): string {
 }
 
 export function panelStatCardStyles(t: PanelTheme): string {
-  return `
+    return `
     .stat-card {
       background: ${t.surface};
       border: 1px solid ${t.border};
@@ -223,7 +223,7 @@ export function panelStatCardStyles(t: PanelTheme): string {
 }
 
 export function panelBannerStyles(t: PanelTheme): string {
-  return `
+    return `
     .banner {
       display: none;
       align-items: center;
@@ -251,7 +251,7 @@ export function panelBannerStyles(t: PanelTheme): string {
 }
 
 export function panelTabsStyles(t: PanelTheme): string {
-  return `
+    return `
     .tabs {
       display: flex;
       gap: 6px;
@@ -283,7 +283,7 @@ export function panelTabsStyles(t: PanelTheme): string {
 }
 
 export function panelListStyles(t: PanelTheme): string {
-  return `
+    return `
     .list,
     .file-list {
       background: ${t.surface};
@@ -372,7 +372,7 @@ export function panelListStyles(t: PanelTheme): string {
 }
 
 export function panelBadgeStyles(t: PanelTheme): string {
-  return `
+    return `
     .badge {
       display: inline-block;
       font-size: 0.62rem;
@@ -395,7 +395,7 @@ export function panelBadgeStyles(t: PanelTheme): string {
 }
 
 export function panelSectionStyles(t: PanelTheme): string {
-  return `
+    return `
     .section-block { margin-bottom: 12px; }
 
     .section-block h2 {
@@ -439,7 +439,7 @@ export function panelSectionStyles(t: PanelTheme): string {
 }
 
 export function panelProgressStyles(t: PanelTheme): string {
-  return `
+    return `
     .progress-section {
       background: ${t.surface};
       border: 1px solid ${t.border};
@@ -493,7 +493,7 @@ export function panelProgressStyles(t: PanelTheme): string {
 }
 
 export function panelCompactToolbarStyles(t: PanelTheme): string {
-  return `
+    return `
     html, body {
       width: 100%;
       height: 100%;
@@ -560,28 +560,24 @@ export function panelCompactToolbarStyles(t: PanelTheme): string {
 }
 
 export function panelContentStyles(t: PanelTheme): string {
-  return [
-    panelBaseStyles(t),
-    panelHeaderStyles(t),
-    panelToolbarBtnStyles(t),
-    panelLoadingStyles(t),
-    panelStatGridStyles(),
-    panelStatCardStyles(t),
-    panelBannerStyles(t),
-    panelTabsStyles(t),
-    panelListStyles(t),
-    panelBadgeStyles(t),
-    panelSectionStyles(t),
-    panelProgressStyles(t),
-  ].join("\n");
+    return [
+        panelBaseStyles(t),
+        panelHeaderStyles(t),
+        panelToolbarBtnStyles(t),
+        panelLoadingStyles(t),
+        panelStatGridStyles(),
+        panelStatCardStyles(t),
+        panelBannerStyles(t),
+        panelTabsStyles(t),
+        panelListStyles(t),
+        panelBadgeStyles(t),
+        panelSectionStyles(t),
+        panelProgressStyles(t),
+    ].join('\n');
 }
 
-export function renderPanelHeader(
-  title: string,
-  subtitle: string,
-  actionHtml = "",
-): string {
-  return `
+export function renderPanelHeader(title: string, subtitle: string, actionHtml = ''): string {
+    return `
   <header class="header">
     <div class="header-main">
       <h1>${title}</h1>
@@ -592,7 +588,7 @@ export function renderPanelHeader(
 }
 
 export function reloadPanelScript(): string {
-  return `
+    return `
     function bindReload() {
       const btn = document.getElementById("reload-btn");
       if (!btn) return;

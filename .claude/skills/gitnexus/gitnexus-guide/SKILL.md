@@ -1,6 +1,6 @@
 ---
 name: gitnexus-guide
-description: "Use when the user asks about GitNexus itself — available tools, how to query the knowledge graph, MCP resources, graph schema, or workflow reference. Examples: \"What GitNexus tools are available?\", \"How do I use GitNexus?\""
+description: 'Use when the user asks about GitNexus itself — available tools, how to query the knowledge graph, MCP resources, graph schema, or workflow reference. Examples: "What GitNexus tools are available?", "How do I use GitNexus?"'
 ---
 
 # GitNexus Guide
@@ -19,8 +19,8 @@ For any task involving code understanding, debugging, impact analysis, or refact
 
 ## Skills
 
-| Task                                         | Skill to read       |
-| -------------------------------------------- | ------------------- |
+| Task                                         | Skill to read                |
+| -------------------------------------------- | ---------------------------- |
 | Understand architecture / "How does X work?" | `gitnexus-exploring`         |
 | Blast radius / "What breaks if I change X?"  | `gitnexus-impact-analysis`   |
 | Trace bugs / "Why is X failing?"             | `gitnexus-debugging`         |
@@ -30,19 +30,19 @@ For any task involving code understanding, debugging, impact analysis, or refact
 
 ## Tools Reference
 
-| Tool             | What it gives you                                                        |
-| ---------------- | ------------------------------------------------------------------------ |
-| `query`          | Process-grouped code intelligence — execution flows related to a concept |
-| `context`        | 360-degree symbol view — categorized refs, processes it participates in  |
-| `impact`         | Symbol blast radius — what breaks at depth 1/2/3 with confidence         |
-| `trace`          | Shortest path between two symbols — "how does A reach B?" in one call     |
-| `detect_changes` | Git-diff impact — what do your current changes affect                    |
-| `rename`         | Multi-file coordinated rename with confidence-tagged edits               |
-| `cypher`         | Raw graph queries (read `gitnexus://repo/{name}/schema` first)           |
-| `explain`        | Persisted taint findings — source→sink data flows (needs `analyze --pdg`) |
+| Tool             | What it gives you                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| `query`          | Process-grouped code intelligence — execution flows related to a concept                           |
+| `context`        | 360-degree symbol view — categorized refs, processes it participates in                            |
+| `impact`         | Symbol blast radius — what breaks at depth 1/2/3 with confidence                                   |
+| `trace`          | Shortest path between two symbols — "how does A reach B?" in one call                              |
+| `detect_changes` | Git-diff impact — what do your current changes affect                                              |
+| `rename`         | Multi-file coordinated rename with confidence-tagged edits                                         |
+| `cypher`         | Raw graph queries (read `gitnexus://repo/{name}/schema` first)                                     |
+| `explain`        | Persisted taint findings — source→sink data flows (needs `analyze --pdg`)                          |
 | `pdg_query`      | Control/data dependence — what gates X (CDG) / where Y flows (REACHING_DEF); needs `analyze --pdg` |
-| `check`          | Check graph invariants such as circular imports                          |
-| `list_repos`     | Discover indexed repos (paginated — `limit`/`offset`)                    |
+| `check`          | Check graph invariants such as circular imports                                                    |
+| `list_repos`     | Discover indexed repos (paginated — `limit`/`offset`)                                              |
 
 ### Paginating `list_repos`
 
@@ -50,17 +50,17 @@ For any task involving code understanding, debugging, impact analysis, or refact
 
 ```jsonc
 {
-  "repositories": [
-    { "name": "...", "path": "...", "indexedAt": "...", "lastCommit": "...", "stats": { } }
-  ],
-  "pagination": {
-    "total": 437,
-    "limit": 50,
-    "offset": 0,
-    "returned": 50,
-    "hasMore": true,
-    "nextOffset": 50
-  }
+    "repositories": [
+        { "name": "...", "path": "...", "indexedAt": "...", "lastCommit": "...", "stats": {} },
+    ],
+    "pagination": {
+        "total": 437,
+        "limit": 50,
+        "offset": 0,
+        "returned": 50,
+        "hasMore": true,
+        "nextOffset": 50,
+    },
 }
 ```
 

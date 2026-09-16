@@ -44,12 +44,12 @@ Sets up GitNexus (MCP server + skills) and Cursor rules (caveman lite, ponytail)
 
 ## Settings
 
-| Setting | Default | Description |
-| --- | :---: | --- |
-| `kyo-tools.codeAnalyze.duplicateMinLines` | 6 | Min lines for duplicate detection |
-| `kyo-tools.codeAnalyze.largeFileLoc` | 300 | Warn above this file line count |
-| `kyo-tools.codeAnalyze.largeFunctionLoc` | 80 | Warn above this function line count |
-| `kyo-tools.codeAnalyze.largeFunctionParams` | 5 | Warn above this param count |
+| Setting                                     | Default | Description                         |
+| ------------------------------------------- | :-----: | ----------------------------------- |
+| `kyo-tools.codeAnalyze.duplicateMinLines`   |    6    | Min lines for duplicate detection   |
+| `kyo-tools.codeAnalyze.largeFileLoc`        |   300   | Warn above this file line count     |
+| `kyo-tools.codeAnalyze.largeFunctionLoc`    |   80    | Warn above this function line count |
+| `kyo-tools.codeAnalyze.largeFunctionParams` |    5    | Warn above this param count         |
 
 See `kyo-tools.codeAnalyze.*` in VS Code settings for entry/exclude globs and more.
 

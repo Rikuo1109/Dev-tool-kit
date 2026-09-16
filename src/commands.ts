@@ -1,144 +1,141 @@
-import * as vscode from "vscode";
-import { openDashboard } from "./features/dashboard";
-import { openCodeGraph } from "./features/code-graph";
-import { analyzeCodeInFolder } from "./features/code-analyze";
-import { openDeadCodeExplorer } from "./features/dead-code-explorer";
-import { openPreMergeReview } from "./features/pre-merge-review";
-import { organizeImportsInFolder } from "./features/organize-imports";
-import { initAiTemplate } from "./features/init-ai-template";
-import { resolveFolderUri } from "./shared/resolveUri";
+import * as vscode from 'vscode';
+import { openDashboard } from './features/dashboard';
+import { openCodeGraph } from './features/code-graph';
+import { analyzeCodeInFolder } from './features/code-analyze';
+import { openDeadCodeExplorer } from './features/dead-code-explorer';
+import { openPreMergeReview } from './features/pre-merge-review';
+import { organizeImportsInFolder } from './features/organize-imports';
+import { initAiTemplate } from './features/init-ai-template';
+import { resolveFolderUri } from './shared/resolveUri';
 
 interface CommandDefinition {
-  id: string;
-  errorTitle: string;
-  uriHint?: string;
-  resolveFolderFromWorkspace?: boolean;
-  resolveFileFromEditor?: boolean;
-  handler: (uri?: vscode.Uri) => Promise<void>;
+    id: string;
+    errorTitle: string;
+    uriHint?: string;
+    resolveFolderFromWorkspace?: boolean;
+    resolveFileFromEditor?: boolean;
+    handler: (uri?: vscode.Uri) => Promise<void>;
 }
 
 async function resolveFileUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
-  if (uri) {
-    return uri;
-  }
+    if (uri) {
+        return uri;
+    }
 
-  const activeEditor = vscode.window.activeTextEditor;
-  const activeUri = activeEditor?.document.uri;
-  if (
-    activeUri?.scheme === "file" &&
-    vscode.workspace.getWorkspaceFolder(activeUri)
-  ) {
-    return activeUri;
-  }
+    const activeEditor = vscode.window.activeTextEditor;
+    const activeUri = activeEditor?.document.uri;
+    if (activeUri?.scheme === 'file' && vscode.workspace.getWorkspaceFolder(activeUri)) {
+        return activeUri;
+    }
 
-  vscode.window.showWarningMessage(
-    "Open a workspace file in the editor, or right-click a file in Explorer and choose Code Graph.",
-  );
-  return undefined;
+    vscode.window.showWarningMessage(
+        'Open a workspace file in the editor, or right-click a file in Explorer and choose Code Graph.',
+    );
+    return undefined;
 }
 
 const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
-  {
-    id: "kyo-tools.initAiTemplate",
-    errorTitle: "Init AI Template failed",
-    handler: async () => {
-      await initAiTemplate();
+    {
+        id: 'kyo-tools.initAiTemplate',
+        errorTitle: 'Init AI Template failed',
+        handler: async () => {
+            await initAiTemplate();
+        },
     },
-  },
-  {
-    id: "code-dashboard.open",
-    errorTitle: "Failed to analyze folder",
-    resolveFolderFromWorkspace: true,
-    handler: async (uri) => {
-      await openDashboard(uri!.fsPath, extensionUri);
+    {
+        id: 'code-dashboard.open',
+        errorTitle: 'Failed to analyze folder',
+        resolveFolderFromWorkspace: true,
+        handler: async (uri) => {
+            await openDashboard(uri!.fsPath, extensionUri);
+        },
     },
-  },
-  {
-    id: "kyo-tools.organizeImports",
-    errorTitle: "Organize imports failed",
-    uriHint: "Right-click a folder in Explorer and choose Organize Imports.",
-    handler: async (uri) => {
-      await organizeImportsInFolder(uri!);
+    {
+        id: 'kyo-tools.organizeImports',
+        errorTitle: 'Organize imports failed',
+        uriHint: 'Right-click a folder in Explorer and choose Organize Imports.',
+        handler: async (uri) => {
+            await organizeImportsInFolder(uri!);
+        },
     },
-  },
-  {
-    id: "kyo-tools.codeGraph",
-    errorTitle: "Failed to build code graph",
-    resolveFileFromEditor: true,
-    handler: async (uri) => {
-      await openCodeGraph(uri!);
+    {
+        id: 'kyo-tools.codeGraph',
+        errorTitle: 'Failed to build code graph',
+        resolveFileFromEditor: true,
+        handler: async (uri) => {
+            await openCodeGraph(uri!);
+        },
     },
-  },
-  {
-    id: "kyo-tools.codeAnalyze",
-    errorTitle: "Code analyze failed",
-    resolveFolderFromWorkspace: true,
-    handler: async (uri) => {
-      await analyzeCodeInFolder(uri!);
+    {
+        id: 'kyo-tools.codeAnalyze',
+        errorTitle: 'Code analyze failed',
+        resolveFolderFromWorkspace: true,
+        handler: async (uri) => {
+            await analyzeCodeInFolder(uri!);
+        },
     },
-  },
-  {
-    id: "kyo-tools.deadCodeExplorer",
-    errorTitle: "Dead Code Explorer failed",
-    resolveFolderFromWorkspace: true,
-    handler: async (uri) => {
-      await openDeadCodeExplorer(uri!);
+    {
+        id: 'kyo-tools.deadCodeExplorer',
+        errorTitle: 'Dead Code Explorer failed',
+        resolveFolderFromWorkspace: true,
+        handler: async (uri) => {
+            await openDeadCodeExplorer(uri!);
+        },
     },
-  },
-  {
-    id: "kyo-tools.preMergeReview",
-    errorTitle: "Pre-merge review failed",
-    resolveFolderFromWorkspace: true,
-    handler: async (uri) => {
-      await openPreMergeReview(uri);
+    {
+        id: 'kyo-tools.preMergeReview',
+        errorTitle: 'Pre-merge review failed',
+        resolveFolderFromWorkspace: true,
+        handler: async (uri) => {
+            await openPreMergeReview(uri);
+        },
     },
-  },
 ];
 
 function formatError(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
+    return error instanceof Error ? error.message : fallback;
 }
 
 function wrapHandler(
-  definition: CommandDefinition,
-  extensionUri: vscode.Uri,
+    definition: CommandDefinition,
+    extensionUri: vscode.Uri,
 ): (...args: unknown[]) => Promise<void> {
-  return async (...args: unknown[]) => {
-    let uri = args[0] as vscode.Uri | undefined;
+    return async (...args: unknown[]) => {
+        let uri = args[0] as vscode.Uri | undefined;
 
-    if (definition.resolveFolderFromWorkspace && !uri) {
-      uri = await resolveFolderUri();
-      if (!uri) {
-        return;
-      }
-    }
+        if (definition.resolveFolderFromWorkspace && !uri) {
+            uri = await resolveFolderUri();
+            if (!uri) {
+                return;
+            }
+        }
 
-    if (definition.resolveFileFromEditor && !uri) {
-      uri = await resolveFileUri();
-      if (!uri) {
-        return;
-      }
-    }
+        if (definition.resolveFileFromEditor && !uri) {
+            uri = await resolveFileUri();
+            if (!uri) {
+                return;
+            }
+        }
 
-    if (definition.uriHint && !uri) {
-      vscode.window.showWarningMessage(definition.uriHint);
-      return;
-    }
+        if (definition.uriHint && !uri) {
+            vscode.window.showWarningMessage(definition.uriHint);
+            return;
+        }
 
-    try {
-      await definition.handler(uri);
-    } catch (error) {
-      vscode.window.showErrorMessage(formatError(error, definition.errorTitle));
-    }
-  };
+        try {
+            await definition.handler(uri);
+        } catch (error) {
+            vscode.window.showErrorMessage(formatError(error, definition.errorTitle));
+        }
+    };
 }
 
 export function registerCommands(context: vscode.ExtensionContext): void {
-  const extensionUri = context.extensionUri;
+    const extensionUri = context.extensionUri;
 
-  for (const definition of createCommands(extensionUri)) {
-    context.subscriptions.push(
-      vscode.commands.registerCommand(definition.id, wrapHandler(definition, extensionUri)),
-    );
-  }
+    for (const definition of createCommands(extensionUri)) {
+        context.subscriptions.push(
+            vscode.commands.registerCommand(definition.id, wrapHandler(definition, extensionUri)),
+        );
+    }
 }

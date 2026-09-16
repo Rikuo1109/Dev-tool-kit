@@ -1,166 +1,146 @@
-import * as fs from "fs";
-import * as path from "path";
-import { matchAnyGlob } from "./globMatch";
-import { normalizePath } from "./paths";
+import * as fs from 'fs';
+import * as path from 'path';
+import { matchAnyGlob } from './globMatch';
+import { normalizePath } from './paths';
 
 const ENTRY_OBJECT_RE = /entry\s*:\s*\{([\s\S]*?)\}/;
 const ENTRY_STRING_RE = /entry\s*:\s*['"]([^'"]+)['"]/;
-const PATH_RESOLVE_RE =
-  /path\.resolve\s*\(\s*__dirname\s*,\s*['"]([^'"]+)['"]\s*\)/g;
+const PATH_RESOLVE_RE = /path\.resolve\s*\(\s*__dirname\s*,\s*['"]([^'"]+)['"]\s*\)/g;
 
 export function parseWebpackLikeEntries(
-  content: string,
-  configDir: string,
-  workspaceRoot: string,
-  entries: Set<string>,
-  labels: Map<string, string>,
-  existsFn: (absPath: string) => boolean = defaultExists,
+    content: string,
+    configDir: string,
+    workspaceRoot: string,
+    entries: Set<string>,
+    labels: Map<string, string>,
+    existsFn: (absPath: string) => boolean = defaultExists,
 ): void {
-  const objectMatch = ENTRY_OBJECT_RE.exec(content);
-  if (objectMatch) {
-    const body = objectMatch[1];
-    const pairRe =
-      /(\w+)\s*:\s*(?:path\.resolve\s*\(\s*__dirname\s*,\s*['"]([^'"]+)['"]\s*\)|['"]([^'"]+)['"])/g;
-    let pair: RegExpExecArray | null;
-    while ((pair = pairRe.exec(body)) !== null) {
-      const name = pair[1];
-      const rel = pair[2] ?? pair[3];
-      const abs = resolveFromConfig(configDir, workspaceRoot, rel, existsFn);
-      if (abs) {
-        entries.add(abs);
-        labels.set(abs, `webpack entry:${name}`);
-      }
+    const objectMatch = ENTRY_OBJECT_RE.exec(content);
+    if (objectMatch) {
+        const body = objectMatch[1];
+        const pairRe =
+            /(\w+)\s*:\s*(?:path\.resolve\s*\(\s*__dirname\s*,\s*['"]([^'"]+)['"]\s*\)|['"]([^'"]+)['"])/g;
+        let pair: RegExpExecArray | null;
+        while ((pair = pairRe.exec(body)) !== null) {
+            const name = pair[1];
+            const rel = pair[2] ?? pair[3];
+            const abs = resolveFromConfig(configDir, workspaceRoot, rel, existsFn);
+            if (abs) {
+                entries.add(abs);
+                labels.set(abs, `webpack entry:${name}`);
+            }
+        }
     }
-  }
 
-  const stringMatch = ENTRY_STRING_RE.exec(content);
-  if (stringMatch) {
-    const abs = resolveFromConfig(
-      configDir,
-      workspaceRoot,
-      stringMatch[1],
-      existsFn,
-    );
-    if (abs) {
-      entries.add(abs);
-      labels.set(abs, "webpack entry");
+    const stringMatch = ENTRY_STRING_RE.exec(content);
+    if (stringMatch) {
+        const abs = resolveFromConfig(configDir, workspaceRoot, stringMatch[1], existsFn);
+        if (abs) {
+            entries.add(abs);
+            labels.set(abs, 'webpack entry');
+        }
     }
-  }
 
-  PATH_RESOLVE_RE.lastIndex = 0;
-  let resolveMatch: RegExpExecArray | null;
-  while ((resolveMatch = PATH_RESOLVE_RE.exec(content)) !== null) {
-    const rel = resolveMatch[1];
-    if (!/\.(tsx?|jsx?|mjs|cjs)$/i.test(rel) && !rel.includes("src/")) {
-      continue;
+    PATH_RESOLVE_RE.lastIndex = 0;
+    let resolveMatch: RegExpExecArray | null;
+    while ((resolveMatch = PATH_RESOLVE_RE.exec(content)) !== null) {
+        const rel = resolveMatch[1];
+        if (!/\.(tsx?|jsx?|mjs|cjs)$/i.test(rel) && !rel.includes('src/')) {
+            continue;
+        }
+        const abs = resolveFromConfig(configDir, workspaceRoot, rel, existsFn);
+        if (abs) {
+            entries.add(abs);
+            if (!labels.has(abs)) {
+                labels.set(abs, 'path.resolve entry candidate');
+            }
+        }
     }
-    const abs = resolveFromConfig(configDir, workspaceRoot, rel, existsFn);
-    if (abs) {
-      entries.add(abs);
-      if (!labels.has(abs)) {
-        labels.set(abs, "path.resolve entry candidate");
-      }
-    }
-  }
 }
 
 function resolveFromConfig(
-  configDir: string,
-  workspaceRoot: string,
-  rel: string,
-  existsFn: (absPath: string) => boolean,
+    configDir: string,
+    workspaceRoot: string,
+    rel: string,
+    existsFn: (absPath: string) => boolean,
 ): string | null {
-  const cleaned = rel.replace(/^\.\//, "");
-  return (
-    resolveExisting(configDir, cleaned, existsFn) ??
-    resolveExisting(workspaceRoot, cleaned, existsFn)
-  );
+    const cleaned = rel.replace(/^\.\//, '');
+    return (
+        resolveExisting(configDir, cleaned, existsFn) ??
+        resolveExisting(workspaceRoot, cleaned, existsFn)
+    );
 }
 
 function resolveExisting(
-  root: string,
-  rel: string,
-  existsFn: (absPath: string) => boolean,
+    root: string,
+    rel: string,
+    existsFn: (absPath: string) => boolean,
 ): string | null {
-  const candidates = [
-    path.join(root, rel),
-    path.join(root, `${rel}.js`),
-    path.join(root, `${rel}.ts`),
-    path.join(root, `${rel}.tsx`),
-    path.join(root, `${rel}.jsx`),
-    path.join(root, rel, "index.js"),
-    path.join(root, rel, "index.ts"),
-    path.join(root, rel, "index.tsx"),
-  ];
-  for (const candidate of candidates) {
-    if (existsFn(candidate)) {
-      return normalizePath(candidate);
+    const candidates = [
+        path.join(root, rel),
+        path.join(root, `${rel}.js`),
+        path.join(root, `${rel}.ts`),
+        path.join(root, `${rel}.tsx`),
+        path.join(root, `${rel}.jsx`),
+        path.join(root, rel, 'index.js'),
+        path.join(root, rel, 'index.ts'),
+        path.join(root, rel, 'index.tsx'),
+    ];
+    for (const candidate of candidates) {
+        if (existsFn(candidate)) {
+            return normalizePath(candidate);
+        }
     }
-  }
-  return null;
+    return null;
 }
 
 function defaultExists(absPath: string): boolean {
-  try {
-    return fs.existsSync(absPath) && fs.statSync(absPath).isFile();
-  } catch {
-    return false;
-  }
+    try {
+        return fs.existsSync(absPath) && fs.statSync(absPath).isFile();
+    } catch {
+        return false;
+    }
 }
 
 /** Collect require.context roots mentioned in source (runtime graph seed dirs). */
-export function extractRequireContextDirs(
-  content: string,
-  fromFile: string,
-): string[] {
-  const dirs: string[] = [];
-  const re = /require\.context\s*\(\s*['"]([^'"]+)['"]/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(content)) !== null) {
-    const abs = normalizePath(path.resolve(path.dirname(fromFile), match[1]));
-    dirs.push(abs);
-  }
-  return dirs;
+export function extractRequireContextDirs(content: string, fromFile: string): string[] {
+    const dirs: string[] = [];
+    const re = /require\.context\s*\(\s*['"]([^'"]+)['"]/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(content)) !== null) {
+        const abs = normalizePath(path.resolve(path.dirname(fromFile), match[1]));
+        dirs.push(abs);
+    }
+    return dirs;
 }
 
 export function isUnderAnyDir(filePath: string, dirs: string[]): boolean {
-  const norm = normalizePath(filePath);
-  return dirs.some(
-    (dir) =>
-      norm === dir || norm.startsWith(dir.endsWith("/") ? dir : `${dir}/`),
-  );
+    const norm = normalizePath(filePath);
+    return dirs.some((dir) => norm === dir || norm.startsWith(dir.endsWith('/') ? dir : `${dir}/`));
 }
 
 /** ponytail: fixture-only webpack entry parse. */
 export function selfCheckEntryDiscovery(): void {
-  const entries = new Set<string>();
-  const labels = new Map<string, string>();
-  const fakeRoot = "/repo";
-  const existing = new Set([
-    "/repo/src/index.js",
-    "/repo/src/mobile.js",
-  ]);
-  const content = `
+    const entries = new Set<string>();
+    const labels = new Map<string, string>();
+    const fakeRoot = '/repo';
+    const existing = new Set(['/repo/src/index.js', '/repo/src/mobile.js']);
+    const content = `
     entry: {
       main: './src/index.js',
       mobile: path.resolve(__dirname, 'src/mobile.js'),
     }
   `;
-  parseWebpackLikeEntries(
-    content,
-    fakeRoot,
-    fakeRoot,
-    entries,
-    labels,
-    (abs) => existing.has(normalizePath(abs)),
-  );
-  if (!entries.has("/repo/src/index.js") || !entries.has("/repo/src/mobile.js")) {
-    throw new Error(`webpack entry parse failed: ${[...entries].join(",")}`);
-  }
-  if (labels.get("/repo/src/mobile.js") !== "webpack entry:mobile") {
-    throw new Error("mobile entry label failed");
-  }
-  if (!matchAnyGlob("src/mobile.js", ["**/mobile.{js,jsx,ts,tsx}"])) {
-    throw new Error("mobile entry glob broken");
-  }
+    parseWebpackLikeEntries(content, fakeRoot, fakeRoot, entries, labels, (abs) =>
+        existing.has(normalizePath(abs)),
+    );
+    if (!entries.has('/repo/src/index.js') || !entries.has('/repo/src/mobile.js')) {
+        throw new Error(`webpack entry parse failed: ${[...entries].join(',')}`);
+    }
+    if (labels.get('/repo/src/mobile.js') !== 'webpack entry:mobile') {
+        throw new Error('mobile entry label failed');
+    }
+    if (!matchAnyGlob('src/mobile.js', ['**/mobile.{js,jsx,ts,tsx}'])) {
+        throw new Error('mobile entry glob broken');
+    }
 }

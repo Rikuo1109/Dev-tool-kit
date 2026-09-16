@@ -1,53 +1,53 @@
-import * as vscode from "vscode";
-import { escapeHtml, isDarkTheme } from "../../shared/html";
-import { openFileInEditor } from "../../shared/openInEditor";
+import * as vscode from 'vscode';
+import { escapeHtml, isDarkTheme } from '../../shared/html';
+import { openFileInEditor } from '../../shared/openInEditor';
 import {
-  panelContentStyles,
-  panelDocument,
-  reloadPanelScript,
-  renderPanelHeader,
-} from "../../shared/panel";
-import { getPanelTheme, PanelTheme } from "../../shared/theme";
-import { CodeAnalyzeReport, DuplicateGroup } from "./types";
+    panelContentStyles,
+    panelDocument,
+    reloadPanelScript,
+    renderPanelHeader,
+} from '../../shared/panel';
+import { getPanelTheme, PanelTheme } from '../../shared/theme';
+import { CodeAnalyzeReport, DuplicateGroup } from './types';
 
 function rowDataAttrs(absolutePath: string, line = 0): string {
-  return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
+    return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
 }
 
 function buildDuplicateAiMessage(group: DuplicateGroup): string {
-  const kindLabel =
-    group.kind === "exact"
-      ? "Exact duplicate"
-      : "Structural duplicate (same shape, different names/literals)";
-  const locations = group.locations
-    .map((loc) => `- ${loc.relativePath}:${loc.startLine}-${loc.endLine}`)
-    .join("\n");
+    const kindLabel =
+        group.kind === 'exact'
+            ? 'Exact duplicate'
+            : 'Structural duplicate (same shape, different names/literals)';
+    const locations = group.locations
+        .map((loc) => `- ${loc.relativePath}:${loc.startLine}-${loc.endLine}`)
+        .join('\n');
 
-  return [
-    "Please help refactor duplicated code in this codebase.",
-    "",
-    `Type: ${kindLabel}`,
-    `Size: ${group.lineCount} lines across ${group.locations.length} locations`,
-    "",
-    "Locations:",
-    locations,
-    "",
-    "Duplicated code preview:",
-    "```",
-    group.preview,
-    "```",
-    "",
-    "Suggested approach:",
-    group.suggestion,
-    "",
-    "Extract shared logic, update all locations to use it, and preserve existing behavior.",
-  ].join("\n");
+    return [
+        'Please help refactor duplicated code in this codebase.',
+        '',
+        `Type: ${kindLabel}`,
+        `Size: ${group.lineCount} lines across ${group.locations.length} locations`,
+        '',
+        'Locations:',
+        locations,
+        '',
+        'Duplicated code preview:',
+        '```',
+        group.preview,
+        '```',
+        '',
+        'Suggested approach:',
+        group.suggestion,
+        '',
+        'Extract shared logic, update all locations to use it, and preserve existing behavior.',
+    ].join('\n');
 }
 
 const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
 
 function panelExtraStyles(t: PanelTheme): string {
-  return `
+    return `
     .sticky-chrome {
       position: sticky;
       top: 0;
@@ -152,17 +152,13 @@ function panelExtraStyles(t: PanelTheme): string {
 }
 
 function getLoadingHtml(folderName: string, isDark: boolean): string {
-  const t = getPanelTheme(isDark);
+    const t = getPanelTheme(isDark);
 
-  return panelDocument({
-    title: "Code Analyze",
-    styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
-    body: `
-      ${renderPanelHeader(
-        `Code Analyze — ${escapeHtml(folderName)}`,
-        "Scanning…",
-        reloadBtn,
-      )}
+    return panelDocument({
+        title: 'Code Analyze',
+        styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
+        body: `
+      ${renderPanelHeader(`Code Analyze — ${escapeHtml(folderName)}`, 'Scanning…', reloadBtn)}
       <div class="loading">
         <div class="spinner"></div>
         <h2>Analyzing codebase</h2>
@@ -173,71 +169,71 @@ function getLoadingHtml(folderName: string, isDark: boolean): string {
         ${reloadPanelScript()}
       </script>
     `,
-  });
+    });
 }
 
 function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
-  const t = getPanelTheme(isDark);
-  const totalIssues =
-    report.unusedFiles.length +
-    report.orphanModules.length +
-    report.unusedExports.length +
-    report.duplicates.length +
-    report.largeFiles.length +
-    report.largeFunctions.length;
-  const durationSec = (report.durationMs / 1000).toFixed(1);
-  const bannerClass = totalIssues > 0 ? "warn" : "success";
+    const t = getPanelTheme(isDark);
+    const totalIssues =
+        report.unusedFiles.length +
+        report.orphanModules.length +
+        report.unusedExports.length +
+        report.duplicates.length +
+        report.largeFiles.length +
+        report.largeFunctions.length;
+    const durationSec = (report.durationMs / 1000).toFixed(1);
+    const bannerClass = totalIssues > 0 ? 'warn' : 'success';
 
-  const renderFileRows = (
-    items: { relativePath: string; absolutePath: string; detail?: string }[],
-    emptyMsg: string,
-  ) => {
-    if (items.length === 0) {
-      return `<div class="empty">${emptyMsg}</div>`;
-    }
-    return items
-      .map(
-        (item) => `
+    const renderFileRows = (
+        items: { relativePath: string; absolutePath: string; detail?: string }[],
+        emptyMsg: string,
+    ) => {
+        if (items.length === 0) {
+            return `<div class="empty">${emptyMsg}</div>`;
+        }
+        return items
+            .map(
+                (item) => `
       <button type="button" class="row" ${rowDataAttrs(item.absolutePath)}>
         <span class="path">${escapeHtml(item.relativePath)}</span>
-        ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ""}
+        ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ''}
       </button>`,
-      )
-      .join("");
-  };
+            )
+            .join('');
+    };
 
-  const renderExportRows = () => {
-    if (report.unusedExports.length === 0) {
-      return `<div class="empty">No unused exports found.</div>`;
-    }
-    return report.unusedExports
-      .map(
-        (item) => `
+    const renderExportRows = () => {
+        if (report.unusedExports.length === 0) {
+            return `<div class="empty">No unused exports found.</div>`;
+        }
+        return report.unusedExports
+            .map(
+                (item) => `
       <button type="button" class="row" ${rowDataAttrs(item.absolutePath, item.line ?? 0)}>
         <span class="path">${escapeHtml(item.relativePath)}</span>
         <span class="badge error">${escapeHtml(item.exportName)}</span>
         <span class="detail">${escapeHtml(item.kind)}</span>
       </button>`,
-      )
-      .join("");
-  };
+            )
+            .join('');
+    };
 
-  const renderDuplicateCards = () => {
-    if (report.duplicates.length === 0) {
-      return `<div class="empty">No duplicate blocks above threshold.</div>`;
-    }
-    return report.duplicates
-      .map((group) => {
-        const badgeClass = group.kind === "exact" ? "error" : "warn";
-        const locations = group.locations
-          .map(
-            (loc) => `
+    const renderDuplicateCards = () => {
+        if (report.duplicates.length === 0) {
+            return `<div class="empty">No duplicate blocks above threshold.</div>`;
+        }
+        return report.duplicates
+            .map((group) => {
+                const badgeClass = group.kind === 'exact' ? 'error' : 'warn';
+                const locations = group.locations
+                    .map(
+                        (loc) => `
           <button type="button" class="loc-btn" ${rowDataAttrs(loc.absolutePath, loc.startLine)}>
             ${escapeHtml(loc.relativePath)}:${loc.startLine}-${loc.endLine}
           </button>`,
-          )
-          .join("");
-        return `
+                    )
+                    .join('');
+                return `
         <article class="duplicate-card">
           <div class="duplicate-head">
             <span class="badge ${badgeClass}">${group.kind}</span>
@@ -248,17 +244,17 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
           <div class="loc-list">${locations}</div>
           <p class="refactor-tip">${escapeHtml(group.suggestion)}</p>
         </article>`;
-      })
-      .join("");
-  };
+            })
+            .join('');
+    };
 
-  const renderLargeFileRows = () => {
-    if (report.largeFiles.length === 0) {
-      return `<div class="empty">No oversized files.</div>`;
-    }
-    return report.largeFiles
-      .map(
-        (item) => `
+    const renderLargeFileRows = () => {
+        if (report.largeFiles.length === 0) {
+            return `<div class="empty">No oversized files.</div>`;
+        }
+        return report.largeFiles
+            .map(
+                (item) => `
       <article class="refactor-card">
         <div class="refactor-head">
           <button type="button" class="loc-btn" ${rowDataAttrs(item.absolutePath)}>
@@ -268,17 +264,17 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         </div>
         <p class="refactor-tip">${escapeHtml(item.suggestion)}</p>
       </article>`,
-      )
-      .join("");
-  };
+            )
+            .join('');
+    };
 
-  const renderLargeFunctionRows = () => {
-    if (report.largeFunctions.length === 0) {
-      return `<div class="empty">No oversized functions.</div>`;
-    }
-    return report.largeFunctions
-      .map(
-        (item) => `
+    const renderLargeFunctionRows = () => {
+        if (report.largeFunctions.length === 0) {
+            return `<div class="empty">No oversized functions.</div>`;
+        }
+        return report.largeFunctions
+            .map(
+                (item) => `
       <article class="refactor-card">
         <div class="refactor-head">
           <button type="button" class="loc-btn" ${rowDataAttrs(item.absolutePath, item.startLine)}>
@@ -289,23 +285,23 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         </div>
         <p class="refactor-tip">${escapeHtml(item.suggestion)}</p>
       </article>`,
-      )
-      .join("");
-  };
+            )
+            .join('');
+    };
 
-  return panelDocument({
-    title: "Code Analyze",
-    styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
-    body: `
+    return panelDocument({
+        title: 'Code Analyze',
+        styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
+        body: `
       <div class="sticky-chrome">
         ${renderPanelHeader(
-          `Code Analyze — ${escapeHtml(report.folderName)}`,
-          `${report.scannedFiles} files scanned in ${durationSec}s`,
-          reloadBtn,
+            `Code Analyze — ${escapeHtml(report.folderName)}`,
+            `${report.scannedFiles} files scanned in ${durationSec}s`,
+            reloadBtn,
         )}
 
         <div class="banner ${bannerClass}">
-          ${totalIssues > 0 ? `${totalIssues} issue(s) found — review tabs below` : "No issues detected in this folder"}
+          ${totalIssues > 0 ? `${totalIssues} issue(s) found — review tabs below` : 'No issues detected in this folder'}
         </div>
 
         <div class="stats six-up">
@@ -346,10 +342,10 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
       </div>
 
       <div class="panel active" id="panel-unused-files">
-        <div class="list">${renderFileRows(report.unusedFiles, "No unused files found.")}</div>
+        <div class="list">${renderFileRows(report.unusedFiles, 'No unused files found.')}</div>
       </div>
       <div class="panel" id="panel-orphans">
-        <div class="list">${renderFileRows(report.orphanModules, "No orphan modules found.")}</div>
+        <div class="list">${renderFileRows(report.orphanModules, 'No orphan modules found.')}</div>
       </div>
       <div class="panel" id="panel-exports">
         <div class="list">${renderExportRows()}</div>
@@ -407,70 +403,62 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         ${reloadPanelScript()}
       </script>
     `,
-  });
+    });
 }
 
 export class CodeAnalyzePanel {
-  private readonly panel: vscode.WebviewPanel;
-  private reloadHandler: (() => void | Promise<void>) | undefined;
+    private readonly panel: vscode.WebviewPanel;
+    private reloadHandler: (() => void | Promise<void>) | undefined;
 
-  private constructor(
-    panel: vscode.WebviewPanel,
-    folderName: string,
-    isDark: boolean,
-  ) {
-    this.panel = panel;
-    this.panel.webview.html = getLoadingHtml(folderName, isDark);
-    this.panel.webview.onDidReceiveMessage(async (message) => {
-      if (message.type === "open" && typeof message.path === "string") {
-        const line =
-          typeof message.line === "number" && message.line > 0
-            ? message.line
-            : 0;
-        await openFileInEditor(message.path, line);
-        return;
-      }
+    private constructor(panel: vscode.WebviewPanel, folderName: string, isDark: boolean) {
+        this.panel = panel;
+        this.panel.webview.html = getLoadingHtml(folderName, isDark);
+        this.panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'open' && typeof message.path === 'string') {
+                const line =
+                    typeof message.line === 'number' && message.line > 0 ? message.line : 0;
+                await openFileInEditor(message.path, line);
+                return;
+            }
 
-      if (message.type === "copy" && typeof message.text === "string") {
-        await vscode.env.clipboard.writeText(message.text);
-        void vscode.window.showInformationMessage(
-          "Copied duplicate prompt for AI",
+            if (message.type === 'copy' && typeof message.text === 'string') {
+                await vscode.env.clipboard.writeText(message.text);
+                void vscode.window.showInformationMessage('Copied duplicate prompt for AI');
+                return;
+            }
+
+            if (message.type === 'reload' && this.reloadHandler) {
+                await this.reloadHandler();
+            }
+        });
+    }
+
+    static open(folderName: string, isDark: boolean): CodeAnalyzePanel {
+        const panel = vscode.window.createWebviewPanel(
+            'kyoToolsCodeAnalyze',
+            `Code Analyze — ${folderName}`,
+            vscode.ViewColumn.One,
+            { enableScripts: true, retainContextWhenHidden: true },
         );
-        return;
-      }
 
-      if (message.type === "reload" && this.reloadHandler) {
-        await this.reloadHandler();
-      }
-    });
-  }
+        return new CodeAnalyzePanel(panel, folderName, isDark);
+    }
 
-  static open(folderName: string, isDark: boolean): CodeAnalyzePanel {
-    const panel = vscode.window.createWebviewPanel(
-      "kyoToolsCodeAnalyze",
-      `Code Analyze — ${folderName}`,
-      vscode.ViewColumn.One,
-      { enableScripts: true, retainContextWhenHidden: true },
-    );
+    bindFolder(_uri: vscode.Uri, onReload: () => void | Promise<void>): void {
+        this.reloadHandler = onReload;
+    }
 
-    return new CodeAnalyzePanel(panel, folderName, isDark);
-  }
+    showLoading(folderName: string): void {
+        this.panel.webview.html = getLoadingHtml(folderName, isDarkTheme());
+        this.panel.title = `Code Analyze — ${folderName}`;
+    }
 
-  bindFolder(_uri: vscode.Uri, onReload: () => void | Promise<void>): void {
-    this.reloadHandler = onReload;
-  }
+    showReport(report: CodeAnalyzeReport): void {
+        this.panel.webview.html = getReportHtml(report, isDarkTheme());
+        this.panel.title = `Code Analyze — ${report.folderName}`;
+    }
 
-  showLoading(folderName: string): void {
-    this.panel.webview.html = getLoadingHtml(folderName, isDarkTheme());
-    this.panel.title = `Code Analyze — ${folderName}`;
-  }
-
-  showReport(report: CodeAnalyzeReport): void {
-    this.panel.webview.html = getReportHtml(report, isDarkTheme());
-    this.panel.title = `Code Analyze — ${report.folderName}`;
-  }
-
-  dispose(): void {
-    this.panel.dispose();
-  }
+    dispose(): void {
+        this.panel.dispose();
+    }
 }
