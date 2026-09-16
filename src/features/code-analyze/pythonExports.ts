@@ -1,6 +1,6 @@
 import { ImportIndex } from '../../shared/javascript/importGraph';
 import { parsePythonImportBindings } from '../../shared/python/graph';
-import { lineAt } from './sourceUtils';
+import { lineAt } from '../../shared/code-parser';
 import { UnusedExportItem } from './types';
 
 interface ExtractedExport {

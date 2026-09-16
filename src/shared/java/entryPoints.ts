@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { JavaTypeIndex } from './graph';
+import { readFileSafe } from '../fs';
 
 const POM_MAIN_CLASS_RE = /<mainClass>\s*([\w.]+)\s*<\/mainClass>/g;
 const GRADLE_MAIN_CLASS_RE = /mainClass(?:Name)?\s*=?\s*['"]([\w.]+)['"]/g;
@@ -97,13 +98,5 @@ function walkForFile(
         if (entry.isDirectory()) {
             walkForFile(fullPath, fileName, results, depth + 1, maxDepth);
         }
-    }
-}
-
-function readFileSafe(filePath: string): string {
-    try {
-        return fs.readFileSync(filePath, 'utf-8');
-    } catch {
-        return '';
     }
 }

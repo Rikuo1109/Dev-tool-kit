@@ -4,8 +4,8 @@ import { isActiveBarrel, isReexportOnlyBarrel } from '../../shared/javascript/ba
 import { ImportIndex, findReachableFiles } from '../../shared/javascript/importGraph';
 import { findUnusedJavaExports } from './javaExports';
 import { findUnusedPythonExports } from './pythonExports';
-import { lineAt, scriptContent } from './sourceUtils';
 import { AnalyzeFileItem, CodeAnalyzeConfig, UnusedExportItem } from './types';
+import { lineAt, scriptContent } from '../../shared/code-parser';
 
 const DEFAULT_ENTRY_GLOBS = [
     '**/main.{ts,tsx,js,jsx}',

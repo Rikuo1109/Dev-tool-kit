@@ -1,18 +1,4 @@
-export function scriptContent(content: string, filePath: string): string {
-    if (!filePath.endsWith('.vue')) {
-        return content;
-    }
-    const blocks = content.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
-    return blocks?.join('\n') ?? content;
-}
-
-export function countLoc(content: string): number {
-    return content.split('\n').filter((line) => line.trim().length > 0).length;
-}
-
-export function lineAt(source: string, index: number): number {
-    return source.slice(0, index).split('\n').length;
-}
+import { lineAt, stripComments } from '../../shared/code-parser';
 
 export interface CodeBlock {
     startLine: number;
@@ -166,21 +152,6 @@ function dedupeBlocks(blocks: CodeBlock[]): CodeBlock[] {
     return unique;
 }
 
-function stripComments(code: string, filePath?: string): string {
-    if (filePath?.endsWith('.py')) {
-        return code
-            .replace(/"""[\s\S]*?"""/g, '')
-            .replace(/'''[\s\S]*?'''/g, '')
-            .replace(/#.*$/gm, '');
-    }
-
-    if (filePath?.endsWith('.java')) {
-        return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    }
-
-    return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-}
-
 export function exactNormalize(code: string, filePath?: string): string {
     return stripComments(code, filePath).replace(/\s+/g, ' ').trim();
 }
@@ -192,17 +163,4 @@ export function structuralNormalize(code: string, filePath?: string): string {
         .replace(/\b[a-zA-Z_$][\w$]*/g, 'ID')
         .replace(/\s+/g, ' ')
         .trim();
-}
-
-export function blockLineCount(block: CodeBlock): number {
-    return block.text.split('\n').filter((line) => line.trim().length > 0).length;
-}
-
-export function previewLines(text: string, maxLines = 3): string {
-    return text
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .slice(0, maxLines)
-        .join('\n');
 }

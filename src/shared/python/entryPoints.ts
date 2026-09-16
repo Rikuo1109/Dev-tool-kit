@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolvePythonModule } from './graph';
+import { readFileSafe } from '../fs';
 
 const SCRIPT_SECTION_RE = /\[(?:project\.scripts|tool\.poetry\.scripts)\]([\s\S]*?)(?:\n\[|$)/g;
 const SCRIPT_ENTRY_RE = /^\s*[\w.-]+\s*=\s*["']([\w.]+):[\w.]+["']/gm;
@@ -121,13 +122,5 @@ function walkForFile(
         if (entry.isDirectory()) {
             walkForFile(fullPath, fileName, results, depth + 1, maxDepth);
         }
-    }
-}
-
-function readFileSafe(filePath: string): string {
-    try {
-        return fs.readFileSync(filePath, 'utf-8');
-    } catch {
-        return '';
     }
 }

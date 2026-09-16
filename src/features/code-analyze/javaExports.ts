@@ -1,10 +1,6 @@
-import {
-    findJavaSamePackageDependencies,
-    JavaTypeIndex,
-    stripJavaCommentsAndStrings,
-} from '../../shared/java/graph';
+import { findJavaSamePackageDependencies, JavaTypeIndex } from '../../shared/java/graph';
 import { ImportIndex } from '../../shared/javascript/importGraph';
-import { lineAt } from './sourceUtils';
+import { lineAt, stripJavaCommentsAndStrings } from '../../shared/code-parser';
 import { UnusedExportItem } from './types';
 
 interface ExtractedExport {

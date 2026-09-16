@@ -1,3 +1,5 @@
+import { stripJavaCommentsAndStrings } from '../code-parser';
+
 const PACKAGE_RE = /^\s*package\s+([\w.]+)\s*;/m;
 const TOP_LEVEL_TYPE_RE =
     /(?:^|\n)\s*(?:public\s+|protected\s+|private\s+)?(?:abstract\s+|final\s+|static\s+)*?(?:class|interface|enum|record)\s+(\w+)/m;
@@ -143,14 +145,6 @@ export function findJavaSamePackageDependencies(
     }
 
     return [...deps];
-}
-
-export function stripJavaCommentsAndStrings(content: string): string {
-    return content
-        .replace(/\/\*[\s\S]*?\*\//g, ' ')
-        .replace(/\/\/.*$/gm, ' ')
-        .replace(/"(\\.|[^"\\])*"/g, ' ')
-        .replace(/'(\\.|[^'\\])*'/g, ' ');
 }
 
 function escapeRegExp(value: string): string {

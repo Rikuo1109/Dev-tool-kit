@@ -1,5 +1,6 @@
 import { ImportIndex } from '../../shared/javascript/importGraph';
-import { blockLineCount, countLoc, extractCodeBlocks, scriptContent } from './sourceUtils';
+import { extractCodeBlocks } from './sourceUtils';
+import { blockLineCount, countLoc, scriptContent } from '../../shared/code-parser';
 import { CodeAnalyzeConfig, LargeFileItem, LargeFunctionItem } from './types';
 
 export function findLargeFiles(

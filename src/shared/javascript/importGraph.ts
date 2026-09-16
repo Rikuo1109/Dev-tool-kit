@@ -2,13 +2,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ANALYZE_SOURCE_GLOB, EXCLUDE_GLOB } from '../constants';
-import { normalizePath, toRelativePath } from '../fs';
+import { createContentCache, normalizePath, toRelativePath } from '../fs';
 import { filterGitIgnoredPaths, findGitRoot } from '../gitignore';
 import { discoverJavaEntryPoints } from '../java/entryPoints';
 import { buildJavaTypeIndex, JavaTypeIndex, parseJavaImports } from '../java/graph';
 import { getSourceLanguage } from '../language';
 import { discoverPythonEntryPoints } from '../python/entryPoints';
 import { parsePythonImports } from '../python/graph';
+import { extractVueScript } from '../code-parser';
 
 const RESOLVE_EXTENSIONS = [
     '',
@@ -94,16 +95,7 @@ export async function buildImportIndex(
         uris.map((uri) => normalizePath(uri.fsPath)).filter((filePath) => !excluded.has(filePath)),
     );
 
-    const contentCache = new Map<string, string>();
-    const getContent = (absPath: string): string => {
-        const cached = contentCache.get(absPath);
-        if (cached !== undefined) {
-            return cached;
-        }
-        const text = fs.readFileSync(absPath, 'utf-8');
-        contentCache.set(absPath, text);
-        return text;
-    };
+    const getContent = createContentCache();
 
     const javaFiles = files.filter((filePath) => getSourceLanguage(filePath) === 'java');
     const javaTypeIndex = buildJavaTypeIndex(javaFiles, getContent);
@@ -392,11 +384,6 @@ function parseImports(content: string, filePath: string): string[] {
     }
 
     return [...specifiers];
-}
-
-function extractVueScript(content: string): string {
-    const blocks = [...content.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)];
-    return blocks.map((block) => block[1]).join('\n');
 }
 
 export function resolveImport(

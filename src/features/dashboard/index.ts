@@ -7,6 +7,7 @@ import { openFileInEditor } from '../../shared/openInEditor';
 import { getDashboardHtml, parseClocData } from './cloc';
 import { getAggregatedGitChangeStats } from './gitChanges';
 import { rankTodos, scanTodosInContent, TodoItem } from './todos';
+import { readFileSafe } from '../../shared/fs';
 
 interface FolderScanResult {
     raw: Record<string, unknown>;
@@ -145,7 +146,10 @@ function countFilesInDir(
             }
 
             const lang = langMap[ext] || ext.slice(1).toUpperCase() || 'Unknown';
-            const content = readFileSync(fullPath, 'utf-8');
+            const content = readFileSafe(fullPath);
+            if (!content) {
+                continue;
+            }
             const counts = countCodeLines(content);
             const relativePath =
                 relative(resolvedRoot, fullPath).replace(/\\/g, '/') ||
