@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { JavaTypeIndex } from './graph';
-import { readFileSafe } from '../fs';
+import { readFileSafe, walkForFile } from '../fs';
 
 const POM_MAIN_CLASS_RE = /<mainClass>\s*([\w.]+)\s*<\/mainClass>/g;
 const GRADLE_MAIN_CLASS_RE = /mainClass(?:Name)?\s*=?\s*['"]([\w.]+)['"]/g;
@@ -64,39 +64,4 @@ function findBuildFiles(workspaceRoot: string, fileName: string): string[] {
     const results: string[] = [];
     walkForFile(workspaceRoot, fileName, results, 0, 4);
     return results;
-}
-
-function walkForFile(
-    dir: string,
-    fileName: string,
-    results: string[],
-    depth: number,
-    maxDepth: number,
-): void {
-    if (depth > maxDepth) {
-        return;
-    }
-
-    let entries: fs.Dirent[];
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-        return;
-    }
-
-    for (const entry of entries) {
-        if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-            continue;
-        }
-
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isFile() && entry.name === fileName) {
-            results.push(fullPath);
-            continue;
-        }
-
-        if (entry.isDirectory()) {
-            walkForFile(fullPath, fileName, results, depth + 1, maxDepth);
-        }
-    }
 }

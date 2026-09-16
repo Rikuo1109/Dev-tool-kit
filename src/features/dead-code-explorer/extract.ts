@@ -1,3 +1,5 @@
+import { lineAt } from '../../shared/code-parser';
+
 const ROUTE_SKIP_NAMES = new Set([
     '_app',
     '_document',
@@ -221,8 +223,4 @@ function normalizeUrlPath(raw: string): string {
         value = value.slice(0, -1);
     }
     return value.replace(/\/+/g, '/') || '/';
-}
-
-function lineAt(source: string, index: number): number {
-    return source.slice(0, index).split('\n').length;
 }

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { readFileSafe } from '../fs';
+import { readFileSafe, walkForFile } from '../fs';
 import { resolvePythonModule } from './graph';
 
 const SCRIPT_SECTION_RE = /\[(?:project\.scripts|tool\.poetry\.scripts)\]([\s\S]*?)(?:\n\[|$)/g;
@@ -86,41 +86,6 @@ function walkForPythonFiles(dir: string, results: string[], depth: number, maxDe
 
         if (entry.isDirectory()) {
             walkForPythonFiles(fullPath, results, depth + 1, maxDepth);
-        }
-    }
-}
-
-function walkForFile(
-    dir: string,
-    fileName: string,
-    results: string[],
-    depth: number,
-    maxDepth: number,
-): void {
-    if (depth > maxDepth) {
-        return;
-    }
-
-    let entries: fs.Dirent[];
-    try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-        return;
-    }
-
-    for (const entry of entries) {
-        if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-            continue;
-        }
-
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isFile() && entry.name === fileName) {
-            results.push(fullPath);
-            continue;
-        }
-
-        if (entry.isDirectory()) {
-            walkForFile(fullPath, fileName, results, depth + 1, maxDepth);
         }
     }
 }
