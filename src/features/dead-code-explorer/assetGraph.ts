@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { EXCLUDE_GLOB } from '../../shared/constants';
-import { ImportIndex, normalizePath } from '../../shared/javascript/importGraph';
+import { normalizePath } from '../../shared/fs';
+import { ImportIndex } from '../../shared/javascript/importGraph';
 import { isAssetReferenced } from './assetMatch';
 
 const COPY_FROM_RE = /from\s*:\s*['"]([^'"]+)['"]/g;

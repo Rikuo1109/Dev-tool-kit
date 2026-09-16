@@ -1,11 +1,8 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { EXCLUDE_GLOB } from '../../shared/constants';
-import {
-    ImportIndex,
-    isPathInsideFolder,
-    normalizePath,
-} from '../../shared/javascript/importGraph';
+import { isPathInsideFolder, normalizePath } from '../../shared/fs';
+import { ImportIndex } from '../../shared/javascript/importGraph';
 import {
     extractApiHandlers,
     extractClientApiRefs,

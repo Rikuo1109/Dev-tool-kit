@@ -1,10 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import {
-    buildImportIndex,
-    isPathInsideFolder,
-    normalizePath,
-} from '../../shared/javascript/importGraph';
+import { buildImportIndex } from '../../shared/javascript/importGraph';
 import { isDarkTheme } from '../../shared/html';
 import {
     findOrphanModules,
@@ -16,6 +12,7 @@ import { findDuplicateCode } from './duplicates';
 import { findLargeFiles, findLargeFunctions } from './largeUnits';
 import { CodeAnalyzePanel } from './panel';
 import { CodeAnalyzeReport } from './types';
+import { isPathInsideFolder, normalizePath } from '../../shared/fs';
 
 export type {
     AnalyzeFileItem,

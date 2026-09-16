@@ -1,14 +1,13 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { EXCLUDE_GLOB, SOURCE_GLOB } from '../../shared/constants';
+import { normalizePath, toRelativePath } from '../../shared/fs';
+import { isDarkTheme } from '../../shared/html';
 import {
     loadTsConfigForFile,
-    normalizePath,
     parseImports,
     resolveImport,
-    toRelativePath,
 } from '../../shared/javascript/importGraph';
-import { isDarkTheme } from '../../shared/html';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { getCodeGraphHtml, getCodeGraphLoadingHtml } from './panel';
 import { CodeGraphData, GraphEdge, GraphExpansion, GraphNode } from './types';

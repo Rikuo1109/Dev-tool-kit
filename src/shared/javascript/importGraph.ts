@@ -2,12 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ANALYZE_SOURCE_GLOB, EXCLUDE_GLOB } from '../constants';
+import { normalizePath, toRelativePath } from '../fs';
 import { filterGitIgnoredPaths, findGitRoot } from '../gitignore';
-import { getSourceLanguage } from '../language';
-import { buildJavaTypeIndex, JavaTypeIndex, parseJavaImports } from '../java/graph';
 import { discoverJavaEntryPoints } from '../java/entryPoints';
-import { parsePythonImports } from '../python/graph';
+import { buildJavaTypeIndex, JavaTypeIndex, parseJavaImports } from '../java/graph';
+import { getSourceLanguage } from '../language';
 import { discoverPythonEntryPoints } from '../python/entryPoints';
+import { parsePythonImports } from '../python/graph';
 
 const RESOLVE_EXTENSIONS = [
     '',
@@ -61,7 +62,8 @@ export interface ImportIndex {
 }
 
 export type ResolvedImport =
-    { type: 'internal'; fsPath: string } | { type: 'external'; name: string };
+    | { type: 'internal'; fsPath: string }
+    | { type: 'external'; name: string };
 
 export async function buildImportIndex(
     workspaceFolder: vscode.WorkspaceFolder,
@@ -550,21 +552,6 @@ function findNearestTsConfig(filePath: string, workspaceRoot: string): string | 
     }
 
     return null;
-}
-
-export function normalizePath(value: string): string {
-    return path.resolve(value).replace(/\\/g, '/');
-}
-
-export function toRelativePath(filePath: string, workspaceRoot: string): string {
-    const rel = path.relative(workspaceRoot, filePath).replace(/\\/g, '/');
-    return rel || path.basename(filePath);
-}
-
-export function isPathInsideFolder(filePath: string, folderPath: string): boolean {
-    const file = normalizePath(filePath);
-    const folder = normalizePath(folderPath).replace(/\/$/, '');
-    return file === folder || file.startsWith(`${folder}/`);
 }
 
 export { parseImports };

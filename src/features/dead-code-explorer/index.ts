@@ -1,13 +1,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { isPathInsideFolder, normalizePath } from '../../shared/fs';
+import { isDarkTheme } from '../../shared/html';
+import { buildImportIndex } from '../../shared/javascript/importGraph';
 import { findUnusedExports, getAnalyzeConfig } from '../code-analyze/deadCode';
 import { UnusedExportItem } from '../code-analyze/types';
-import {
-    buildImportIndex,
-    isPathInsideFolder,
-    normalizePath,
-} from '../../shared/javascript/importGraph';
-import { isDarkTheme } from '../../shared/html';
 import { buildAssetGraph } from './assetGraph';
 import { classifyDeadFiles } from './classifyFiles';
 import { getDeadCodeExplorerConfig } from './config';

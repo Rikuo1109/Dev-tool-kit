@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { EXCLUDE_GLOB } from '../../shared/constants';
-import { normalizePath } from '../../shared/javascript/importGraph';
+import { normalizePath } from '../../shared/fs';
 import { parseWebpackLikeEntries } from './entryParse';
 
 const QUOTED_SRC_RE = /['"]((?:\.\.?\/)?(?:src\/)?[^'"]+\.(?:tsx?|jsx?|mjs|cjs))['"]/g;

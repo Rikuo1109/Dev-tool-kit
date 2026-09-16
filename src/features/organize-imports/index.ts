@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { EXCLUDE_GLOB, SOURCE_GLOB } from '../../shared/constants';
+import { toRelativePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
 import { FileOrganizeResult, OrganizeImportsPanel, OrganizeReport } from './panel';
 
@@ -121,16 +122,6 @@ function buildErrorSummary(files: FileOrganizeResult[]): { message: string; coun
     return [...counts.entries()]
         .map(([message, count]) => ({ message, count }))
         .sort((a, b) => b.count - a.count);
-}
-
-function toRelativePath(filePath: string, folderPath: string): string {
-    const normalizedFile = filePath.replace(/\\/g, '/');
-    const normalizedFolder = folderPath.replace(/\\/g, '/');
-    return (
-        normalizedFile.replace(`${normalizedFolder}/`, '') ||
-        normalizedFile.split('/').pop() ||
-        normalizedFile
-    );
 }
 
 async function organizeImportsInFile(uri: vscode.Uri): Promise<boolean> {

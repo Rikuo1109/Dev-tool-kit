@@ -1,9 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-
-function normalizePath(value: string): string {
-    return path.resolve(value).replace(/\\/g, '/');
-}
+import { normalizePath } from '../fs';
 
 function parsePythonImportModules(content: string): string[] {
     const modules = new Set<string>();

@@ -1,5 +1,6 @@
 import * as path from 'path';
-import { ImportIndex, normalizePath } from './importGraph';
+import { normalizePath } from '../fs';
+import { ImportIndex } from './importGraph';
 
 const INDEX_FILE_RE = /[/\\]index\.(tsx?|jsx?|mjs|cjs)$/i;
 const REEXPORT_FROM_RE = /export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"]([^'"]+)['"]/g;
