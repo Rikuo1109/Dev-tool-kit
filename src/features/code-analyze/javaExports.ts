@@ -1,6 +1,7 @@
+import { lineAt, stripJavaCommentsAndStrings } from '../../shared/code-parser';
 import { findJavaSamePackageDependencies, JavaTypeIndex } from '../../shared/java/graph';
 import { ImportIndex } from '../../shared/javascript/importGraph';
-import { lineAt, stripJavaCommentsAndStrings } from '../../shared/code-parser';
+import { escapeRegExp } from '../../shared/string';
 import { UnusedExportItem } from './types';
 
 interface ExtractedExport {
@@ -180,8 +181,4 @@ function resolveStaticImport(specifier: string, javaTypeIndex: JavaTypeIndex): s
     }
 
     return javaTypeIndex.classToFile.get(specifier.slice(0, lastDot)) ?? null;
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

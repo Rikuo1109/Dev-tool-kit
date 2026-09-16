@@ -1,3 +1,4 @@
+import { escapeRegExp } from '../../../shared/string';
 import { FileCheckContext, FileChecker, ReviewIssue } from '../types';
 import { checkSharedQuality, linesMatching } from './shared';
 
@@ -89,7 +90,3 @@ export const checkPython: FileChecker = (ctx) => {
 
     return items;
 };
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}

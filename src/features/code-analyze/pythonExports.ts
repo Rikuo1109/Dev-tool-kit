@@ -2,6 +2,7 @@ import { ImportIndex } from '../../shared/javascript/importGraph';
 import { parsePythonImportBindings } from '../../shared/python/graph';
 import { lineAt } from '../../shared/code-parser';
 import { UnusedExportItem } from './types';
+import { escapeRegExp } from '../../shared/string';
 
 interface ExtractedExport {
     name: string;
@@ -159,8 +160,4 @@ function extractModuleAttributeUsage(content: string, moduleAlias: string): stri
         names.add(match[1]);
     }
     return [...names];
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

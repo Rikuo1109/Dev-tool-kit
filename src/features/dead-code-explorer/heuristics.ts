@@ -13,6 +13,7 @@ import {
     pathReferenced,
 } from './extract';
 import { DeadItem } from './types';
+import { escapeRegExp } from '../../shared/string';
 
 export async function findDeadRoutes(folderPath: string, index: ImportIndex): Promise<DeadItem[]> {
     const refs = new Set<string>();
@@ -235,8 +236,4 @@ function cssModuleClassUsed(
         }
     }
     return false;
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

@@ -1,3 +1,5 @@
+import { escapeRegExp } from '../../shared/string';
+
 function matchGlob(relativePath: string, pattern: string): boolean {
     const path = relativePath.replace(/\\/g, '/');
     const glob = pattern.replace(/\\/g, '/');
@@ -58,8 +60,4 @@ function globToRegExp(glob: string): RegExp {
     }
     out += '$';
     return new RegExp(out, 'i');
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

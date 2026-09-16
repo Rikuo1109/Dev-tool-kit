@@ -1,3 +1,4 @@
+import { escapeRegExp } from '../../../shared/string';
 import { FileCheckContext, FileChecker, ReviewIssue } from '../types';
 import { checkSharedQuality, linesMatching } from './shared';
 
@@ -169,7 +170,3 @@ export const checkJavaScript: FileChecker = (ctx) => {
     items.push(...checkLargeAddedBlock(ctx));
     return items;
 };
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}

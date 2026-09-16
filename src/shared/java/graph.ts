@@ -1,4 +1,5 @@
 import { stripJavaCommentsAndStrings } from '../code-parser';
+import { escapeRegExp } from '../string';
 
 const PACKAGE_RE = /^\s*package\s+([\w.]+)\s*;/m;
 const TOP_LEVEL_TYPE_RE =
@@ -145,10 +146,6 @@ export function findJavaSamePackageDependencies(
     }
 
     return [...deps];
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export function parseJavaImports(
