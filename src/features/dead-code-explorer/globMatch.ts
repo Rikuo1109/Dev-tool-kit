@@ -1,4 +1,3 @@
-/** Minimal glob matcher for ** / * path patterns (posix relative paths). */
 function matchGlob(relativePath: string, pattern: string): boolean {
     const path = relativePath.replace(/\\/g, '/');
     const glob = pattern.replace(/\\/g, '/');
@@ -63,23 +62,4 @@ function globToRegExp(glob: string): RegExp {
 
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** ponytail: fixture-only glob checks. */
-export function selfCheckGlobMatch(): void {
-    if (!matchGlob('public/assets/js/tinymce-5/x.js', 'public/**/tinymce*/**')) {
-        throw new Error('tinymce glob failed');
-    }
-    if (!matchGlob('tools/generate-react-cli/foo.tsx', 'tools/**')) {
-        throw new Error('tools glob failed');
-    }
-    if (!matchGlob('src/types/foo.d.ts', '**/*.d.ts')) {
-        throw new Error('d.ts glob failed');
-    }
-    if (matchGlob('src/hooks/useX.ts', 'tools/**')) {
-        throw new Error('tools glob over-matched');
-    }
-    if (!matchGlob('src/mobile.js', '**/mobile.{js,jsx,ts,tsx}')) {
-        throw new Error('brace glob failed');
-    }
 }

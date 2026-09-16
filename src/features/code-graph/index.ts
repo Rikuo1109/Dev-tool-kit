@@ -15,7 +15,7 @@ import { CodeGraphData, GraphEdge, GraphExpansion, GraphNode } from './types';
 
 export type { CodeGraphData, GraphExpansion } from './types';
 
-export async function buildCodeGraph(
+async function buildCodeGraph(
     fileUri: vscode.Uri,
     onProgress?: (message: string) => void,
 ): Promise<CodeGraphData> {
@@ -39,10 +39,7 @@ export async function buildCodeGraph(
     return toGraphData(normalizedTarget, workspaceRoot, dependencies, dependents);
 }
 
-export async function expandGraphNode(
-    fileUri: vscode.Uri,
-    nodePath: string,
-): Promise<GraphExpansion> {
+async function expandGraphNode(fileUri: vscode.Uri, nodePath: string): Promise<GraphExpansion> {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
     if (!workspaceFolder) {
         throw new Error('File is not inside a workspace folder');

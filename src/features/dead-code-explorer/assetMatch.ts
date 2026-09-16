@@ -22,17 +22,3 @@ export function isAssetReferenced(relativePath: string, urlFragments: Set<string
     }
     return false;
 }
-
-/** ponytail: fixture-only asset ref matching. */
-export function selfCheckAssetGraph(): void {
-    const frags = new Set<string>(['service-worker.js', 'tinymce', 'assets/js/tinymce-5']);
-    if (!isAssetReferenced('public/service-worker.js', frags)) {
-        throw new Error('SW ref failed');
-    }
-    if (!isAssetReferenced('public/assets/js/tinymce-5/tinymce.min.js', frags)) {
-        throw new Error('tinymce ref failed');
-    }
-    if (isAssetReferenced('src/hooks/useX.ts', frags)) {
-        throw new Error('asset ref over-matched app file');
-    }
-}

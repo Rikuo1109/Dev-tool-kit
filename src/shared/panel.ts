@@ -1,13 +1,12 @@
 import { escapeHtml } from './html';
 import { PanelTheme } from './theme';
 
-export const PANEL_CSP =
-    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';";
+const PANEL_CSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';";
 
 export const PANEL_CSP_CDN =
     "default-src 'none'; style-src 'unsafe-inline' https://cdn.jsdelivr.net; script-src https://cdn.jsdelivr.net 'unsafe-inline'; img-src data:;";
 
-export function panelWebviewCsp(cspSource: string): string {
+export function panelWebviewCsp(cspSource: string) {
     return `default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src ${cspSource} 'unsafe-inline'; img-src data:;`;
 }
 
@@ -20,7 +19,7 @@ export interface PanelDocumentOptions {
     bodyExtra?: string;
 }
 
-export function panelDocument(options: PanelDocumentOptions): string {
+export function panelDocument(options: PanelDocumentOptions) {
     const bodyAttrs = [
         options.bodyClass ? `class="${options.bodyClass}"` : '',
         options.bodyExtra ? `style="${options.bodyExtra}"` : '',
@@ -45,10 +44,7 @@ export function panelDocument(options: PanelDocumentOptions): string {
 </html>`;
 }
 
-export function panelBaseStyles(
-    t: PanelTheme,
-    options: { padding?: string; minHeight?: string } = {},
-): string {
+function panelBaseStyles(t: PanelTheme, options: { padding?: string; minHeight?: string } = {}) {
     const padding = options.padding ?? '10px 12px';
     const minHeight = options.minHeight ?? '100vh';
 
@@ -66,7 +62,7 @@ export function panelBaseStyles(
   `;
 }
 
-export function panelHeaderStyles(t: PanelTheme): string {
+function panelHeaderStyles(t: PanelTheme) {
     return `
     .header {
       display: flex;
@@ -92,7 +88,7 @@ export function panelHeaderStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelToolbarBtnStyles(t: PanelTheme): string {
+export function panelToolbarBtnStyles(t: PanelTheme) {
     return `
     .toolbar-btn,
     .btn {
@@ -136,7 +132,7 @@ export function panelToolbarBtnStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelLoadingStyles(t: PanelTheme): string {
+export function panelLoadingStyles(t: PanelTheme) {
     return `
     .loading {
       display: flex;
@@ -172,7 +168,7 @@ export function panelLoadingStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelStatGridStyles(minWidth = '110px'): string {
+function panelStatGridStyles(minWidth = '110px') {
     return `
     .stats {
       display: grid;
@@ -183,7 +179,7 @@ export function panelStatGridStyles(minWidth = '110px'): string {
   `;
 }
 
-export function panelStatCardStyles(t: PanelTheme): string {
+function panelStatCardStyles(t: PanelTheme) {
     return `
     .stat-card {
       background: ${t.surface};
@@ -222,7 +218,7 @@ export function panelStatCardStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelBannerStyles(t: PanelTheme): string {
+function panelBannerStyles(t: PanelTheme) {
     return `
     .banner {
       display: none;
@@ -250,7 +246,7 @@ export function panelBannerStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelTabsStyles(t: PanelTheme): string {
+function panelTabsStyles(t: PanelTheme) {
     return `
     .tabs {
       display: flex;
@@ -282,7 +278,7 @@ export function panelTabsStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelListStyles(t: PanelTheme): string {
+function panelListStyles(t: PanelTheme) {
     return `
     .list,
     .file-list {
@@ -371,7 +367,7 @@ export function panelListStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelBadgeStyles(t: PanelTheme): string {
+function panelBadgeStyles(t: PanelTheme) {
     return `
     .badge {
       display: inline-block;
@@ -394,7 +390,7 @@ export function panelBadgeStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelSectionStyles(t: PanelTheme): string {
+function panelSectionStyles(t: PanelTheme) {
     return `
     .section-block { margin-bottom: 12px; }
 
@@ -438,7 +434,7 @@ export function panelSectionStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelProgressStyles(t: PanelTheme): string {
+function panelProgressStyles(t: PanelTheme) {
     return `
     .progress-section {
       background: ${t.surface};
@@ -492,7 +488,7 @@ export function panelProgressStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelCompactToolbarStyles(t: PanelTheme): string {
+export function panelCompactToolbarStyles(t: PanelTheme) {
     return `
     html, body {
       width: 100%;
@@ -559,7 +555,7 @@ export function panelCompactToolbarStyles(t: PanelTheme): string {
   `;
 }
 
-export function panelContentStyles(t: PanelTheme): string {
+export function panelContentStyles(t: PanelTheme) {
     return [
         panelBaseStyles(t),
         panelHeaderStyles(t),
@@ -576,7 +572,7 @@ export function panelContentStyles(t: PanelTheme): string {
     ].join('\n');
 }
 
-export function renderPanelHeader(title: string, subtitle: string, actionHtml = ''): string {
+export function renderPanelHeader(title: string, subtitle: string, actionHtml = '') {
     return `
   <header class="header">
     <div class="header-main">
@@ -587,7 +583,7 @@ export function renderPanelHeader(title: string, subtitle: string, actionHtml = 
   </header>`;
 }
 
-export function reloadPanelScript(): string {
+export function reloadPanelScript() {
     return `
     function bindReload() {
       const btn = document.getElementById("reload-btn");

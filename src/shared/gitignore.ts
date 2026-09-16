@@ -44,13 +44,12 @@ export function filterGitIgnoredPaths(gitRoot: string, filePaths: string[]): str
     return filePaths.filter((_, index) => !ignoredRel.has(relPaths[index]));
 }
 
-export function isGitIgnoredPath(gitRoot: string, filePath: string): boolean {
-    return filterGitIgnoredPaths(gitRoot, [filePath]).length === 0;
-}
-
 function toGitRelativePath(gitRoot: string, filePath: string): string {
-    const rel = path.relative(gitRoot, filePath).replace(/\\/g, '/');
-    return rel || '.';
+    const trailing = /[/\\]$/.test(filePath);
+    const trimmed = trailing ? filePath.replace(/[/\\]+$/, '') : filePath;
+    const rel = path.relative(gitRoot, trimmed).replace(/\\/g, '/');
+    const base = rel || '.';
+    return trailing && base !== '.' ? `${base}/` : base;
 }
 
 function isCheckIgnoreNoMatch(error: unknown): boolean {

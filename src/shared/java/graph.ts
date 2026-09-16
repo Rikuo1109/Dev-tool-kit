@@ -47,7 +47,7 @@ export function buildJavaTypeIndex(
     };
 }
 
-export function getJavaTopLevelTypeName(content: string, filePath: string): string | null {
+function getJavaTopLevelTypeName(content: string, filePath: string) {
     const packageName = content.match(PACKAGE_RE)?.[1];
     const typeName = content.match(TOP_LEVEL_TYPE_RE)?.[1] ?? getFallbackJavaTypeName(filePath);
 
@@ -88,7 +88,7 @@ function parseJavaImportRefs(content: string): JavaImportRef[] {
     return refs;
 }
 
-export function resolveJavaImport(specifier: string, index: JavaTypeIndex): string | null {
+function resolveJavaImport(specifier: string, index: JavaTypeIndex) {
     const direct = index.classToFile.get(specifier);
     if (direct) {
         return direct;

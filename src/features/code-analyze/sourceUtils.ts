@@ -30,7 +30,7 @@ export function extractCodeBlocks(source: string, filePath: string): CodeBlock[]
     return extractBraceBlocks(source);
 }
 
-export function extractPythonBlocks(source: string): CodeBlock[] {
+function extractPythonBlocks(source: string): CodeBlock[] {
     const lines = source.split('\n');
     const blocks: CodeBlock[] = [];
 
@@ -69,7 +69,7 @@ export function extractPythonBlocks(source: string): CodeBlock[] {
     return dedupeBlocks(blocks);
 }
 
-export function extractJavaBlocks(source: string): CodeBlock[] {
+function extractJavaBlocks(source: string): CodeBlock[] {
     const openers = [
         /(?:^|\n)\s*(?:@[\w().,\s"=]+\s+)*(?:public|private|protected)\s+(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?(?:<[^>]+>\s+)?[\w\[\].,\s<>?]+\s+\w+\s*\([^{;]*\)\s*\{/g,
         /(?:^|\n)\s*(?:@[\w().,\s"=]+\s+)*[\w\[\].,\s<>?]+\s+\w+\s*\([^{;]*\)\s*\{/g,
@@ -98,7 +98,7 @@ export function extractJavaBlocks(source: string): CodeBlock[] {
     return dedupeBlocks(blocks);
 }
 
-export function extractBraceBlocks(source: string): CodeBlock[] {
+function extractBraceBlocks(source: string): CodeBlock[] {
     const blocks: CodeBlock[] = [];
     const openers = [
         /export\s+(?:async\s+)?function\s+\w+/g,
@@ -166,7 +166,7 @@ function dedupeBlocks(blocks: CodeBlock[]): CodeBlock[] {
     return unique;
 }
 
-export function stripComments(code: string, filePath?: string): string {
+function stripComments(code: string, filePath?: string): string {
     if (filePath?.endsWith('.py')) {
         return code
             .replace(/"""[\s\S]*?"""/g, '')

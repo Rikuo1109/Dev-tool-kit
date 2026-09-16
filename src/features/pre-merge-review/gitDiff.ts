@@ -185,5 +185,3 @@ function runGit(gitRoot: string, args: string[]): Promise<string> {
         );
     });
 }
-
-export { runGit };

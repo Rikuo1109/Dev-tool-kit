@@ -1,4 +1,4 @@
-export const CAVEMAN_LITE_RULE = `---
+const CAVEMAN_LITE_RULE = `---
 description: Caveman lite — tight professional responses without filler. Active on every new chat session.
 alwaysApply: true
 ---
@@ -32,7 +32,7 @@ Drop compression for security warnings, irreversible actions, ambiguous multi-st
 Code blocks, commits, and PR text stay normal unless the user asks for caveman there too.
 `;
 
-export const CAVEMAN_SKILL = `---
+const CAVEMAN_SKILL = `---
 name: caveman
 description: >
   Ultra-compressed communication mode. Cuts token usage by speaking terse while keeping
@@ -73,7 +73,7 @@ Drop caveman for security warnings, irreversible confirmations, ambiguous multi-
 Code/commits/PRs: write normal. "stop caveman" or "normal mode": revert.
 `;
 
-export const PONYTAIL_RULE = `---
+const PONYTAIL_RULE = `---
 description: Ponytail — lazy senior dev mode. Always pick the simplest solution that works.
 alwaysApply: true
 ---
@@ -110,7 +110,7 @@ Rules:
 Not lazy about: understanding the problem (read it fully and trace the real flow before picking a rung, a small diff you don't understand is just laziness dressed up as efficiency), input validation at trust boundaries, error handling that prevents data loss, security, accessibility, the calibration real hardware needs (the platform is never the spec ideal, a clock drifts, a sensor reads off), anything explicitly requested. Lazy code without its check is unfinished: non-trivial logic leaves ONE runnable check behind, the smallest thing that fails if the logic breaks (an assert-based demo/self-check or one small test file; no frameworks, no fixtures). Trivial one-liners need no test.
 `;
 
-export const AI_TEMPLATE_MANIFEST = `{
+const AI_TEMPLATE_MANIFEST = `{
   "version": 1,
   "generator": "kyo-tools.initAiTemplate",
   "components": ["gitnexus", "caveman-lite", "ponytail"]

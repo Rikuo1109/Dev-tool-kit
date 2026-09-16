@@ -118,29 +118,3 @@ export function isUnderAnyDir(filePath: string, dirs: string[]): boolean {
     const norm = normalizePath(filePath);
     return dirs.some((dir) => norm === dir || norm.startsWith(dir.endsWith('/') ? dir : `${dir}/`));
 }
-
-/** ponytail: fixture-only webpack entry parse. */
-export function selfCheckEntryDiscovery(): void {
-    const entries = new Set<string>();
-    const labels = new Map<string, string>();
-    const fakeRoot = '/repo';
-    const existing = new Set(['/repo/src/index.js', '/repo/src/mobile.js']);
-    const content = `
-    entry: {
-      main: './src/index.js',
-      mobile: path.resolve(__dirname, 'src/mobile.js'),
-    }
-  `;
-    parseWebpackLikeEntries(content, fakeRoot, fakeRoot, entries, labels, (abs) =>
-        existing.has(normalizePath(abs)),
-    );
-    if (!entries.has('/repo/src/index.js') || !entries.has('/repo/src/mobile.js')) {
-        throw new Error(`webpack entry parse failed: ${[...entries].join(',')}`);
-    }
-    if (labels.get('/repo/src/mobile.js') !== 'webpack entry:mobile') {
-        throw new Error('mobile entry label failed');
-    }
-    if (!matchAnyGlob('src/mobile.js', ['**/mobile.{js,jsx,ts,tsx}'])) {
-        throw new Error('mobile entry glob broken');
-    }
-}

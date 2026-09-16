@@ -5,7 +5,7 @@ function normalizePath(value: string): string {
     return path.resolve(value).replace(/\\/g, '/');
 }
 
-export function parsePythonImportModules(content: string): string[] {
+function parsePythonImportModules(content: string): string[] {
     const modules = new Set<string>();
 
     for (const line of content.split('\n')) {

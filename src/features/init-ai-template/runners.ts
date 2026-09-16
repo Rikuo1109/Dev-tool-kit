@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 
 export type WriteResult = 'created' | 'updated' | 'skipped';
 
-export async function ensureDirectory(dirPath: string): Promise<void> {
+async function ensureDirectory(dirPath: string): Promise<void> {
     await fs.promises.mkdir(dirPath, { recursive: true });
 }
 

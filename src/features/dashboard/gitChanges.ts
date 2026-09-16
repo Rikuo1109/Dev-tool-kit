@@ -247,11 +247,7 @@ function toChangeStats(daily: GitDailyStats): GitChangeStats {
     };
 }
 
-export function getGitChangeStats(folder: string): GitChangeStats {
-    return toChangeStats(collectGitDailyStats(folder));
-}
-
-export function findSubrepos(folder: string): string[] {
+function findSubrepos(folder: string) {
     const result: string[] = [];
     const resolved = path.resolve(folder);
 
@@ -491,44 +487,4 @@ export function formatGitChartLabels(days: GitDayChange[]): string[] {
         }
         return formatShortDate(day.date);
     });
-}
-
-/** ponytail: runnable checks. Ceiling: fixtures only, no real git. */
-export function selfCheckBuildMixedSeries(): void {
-    const byDate = new Map<string, DailyBucket>([
-        ['2026-05-01', { added: 100, deleted: 0 }],
-        ['2026-07-01', { added: 50, deleted: 0 }],
-        ['2026-07-16', { added: 10, deleted: 0 }],
-    ]);
-    const series = buildMixedSeries(byDate, new Date(2026, 6, 16));
-    const may = series.find((d) => d.date === '2026-05');
-    const julyMonth = series.find((d) => d.date === '2026-07' && d.isMonth);
-    const today = series.find((d) => d.date === '2026-07-16');
-    if (may?.added !== 100) {
-        throw new Error('May month should keep daily totals');
-    }
-    if ((julyMonth?.added ?? 0) !== 50) {
-        throw new Error('July month should exclude recent-day window');
-    }
-    if (today?.added !== 10) {
-        throw new Error('Today stays in day column');
-    }
-    if (series.filter((d) => d.isMonth).length !== 3) {
-        throw new Error('exactly 3 months');
-    }
-
-    const files = new Map<string, UncommittedFile>();
-    mergeNumstatIntoFiles(
-        '10\t2\tsrc/a.ts\n-\t-\tbin.dat\n3\t1\tsrc/a.ts\n',
-        '/repo',
-        '/repo',
-        files,
-    );
-    const a = files.get('/repo/src/a.ts');
-    if (!a || a.added !== 13 || a.deleted !== 3 || a.net !== 10) {
-        throw new Error('staged+unstaged numstat should merge per file');
-    }
-    if (files.size !== 1) {
-        throw new Error('binary numstat rows should be skipped');
-    }
 }

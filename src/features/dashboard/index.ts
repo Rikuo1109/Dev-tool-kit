@@ -57,7 +57,7 @@ function countCodeLines(content: string): {
 
 function countFilesInDir(
     dirPath: string,
-    excludeDirs = new Set(['node_modules', 'dist', 'build', '.git']),
+    excludeDirs = new Set(['node_modules', 'dist', 'build', '.git', '.gitnexus']),
 ): FolderScanResult {
     const result: Record<string, unknown> = {};
     const foundTodos: TodoItem[] = [];
@@ -72,10 +72,10 @@ function countFilesInDir(
     const filesToCheck: string[] = [];
     const compressedExts = new Set(['.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z', '.rar', '.xz']);
 
-    function walkDir(path: string) {
+    function walkDir(dir: string) {
         try {
-            const entries = readdirSync(path);
-            for (const entry of entries) {
+            const pending: { fullPath: string; isDir: boolean }[] = [];
+            for (const entry of readdirSync(dir)) {
                 if (entry.startsWith('.') && !isGit) {
                     continue;
                 }
@@ -83,13 +83,29 @@ function countFilesInDir(
                     continue;
                 }
 
-                const fullPath = join(path, entry);
-                const stat = statSync(fullPath);
+                const fullPath = join(dir, entry);
+                try {
+                    pending.push({ fullPath, isDir: statSync(fullPath).isDirectory() });
+                } catch {
+                    // Skip unreadable entries
+                }
+            }
 
-                if (stat.isDirectory()) {
-                    walkDir(fullPath);
+            const checkPaths = pending.map((item) =>
+                item.isDir ? `${item.fullPath.replace(/\\/g, '/')}/` : item.fullPath,
+            );
+            const allowed = new Set(
+                gitRoot ? filterGitIgnoredPaths(gitRoot, checkPaths) : checkPaths,
+            );
+
+            for (let i = 0; i < pending.length; i++) {
+                if (!allowed.has(checkPaths[i])) {
+                    continue;
+                }
+                if (pending[i].isDir) {
+                    walkDir(pending[i].fullPath);
                 } else {
-                    filesToCheck.push(fullPath);
+                    filesToCheck.push(pending[i].fullPath);
                 }
             }
         } catch {
@@ -99,8 +115,7 @@ function countFilesInDir(
 
     walkDir(dirPath);
 
-    // Filter gitignore files if in a git repo
-    const filesToProcess = gitRoot ? filterGitIgnoredPaths(gitRoot, filesToCheck) : filesToCheck;
+    const filesToProcess = filesToCheck;
 
     const langMap: Record<string, string> = {
         '.js': 'JavaScript',

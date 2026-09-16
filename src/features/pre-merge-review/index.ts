@@ -5,7 +5,7 @@ import { runPreMergeReview } from './analyze';
 import { getCurrentBranch, listGitBranches, resolveGitRoot } from './gitDiff';
 import { PreMergeReviewPanel } from './panel';
 
-export async function pickCompareBranch(
+async function pickCompareBranch(
     gitRoot: string,
     currentBranch: string,
 ): Promise<string | undefined> {
