@@ -97,25 +97,72 @@ export function findOrphanModules(scopedFiles: string[], index: ImportIndex): An
     return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
+function buildStarReexportMap(index: ImportIndex): Map<string, Set<string>> {
+    const map = new Map<string, Set<string>>();
+    const starRe = /export\s+\*\s+(?:as\s+\w+\s+)?from\s+['"]([^'"]+)['"]/g;
+    for (const filePath of index.files) {
+        const content = index.getContent(filePath);
+        starRe.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = starRe.exec(content)) !== null) {
+            const resolved = index.resolve(filePath, match[1]);
+            if (!resolved || resolved === 'external') {
+                continue;
+            }
+            const set = map.get(resolved) ?? new Set<string>();
+            set.add(filePath);
+            map.set(resolved, set);
+        }
+    }
+    return map;
+}
+
+function isReexportedViaAliveBarrel(
+    modulePath: string,
+    index: ImportIndex,
+    starMap: Map<string, Set<string>>,
+    reachable: Set<string>,
+): boolean {
+    const barrels = starMap.get(modulePath);
+    if (!barrels || barrels.size === 0) {
+        return false;
+    }
+    for (const barrel of barrels) {
+        if (index.entryPoints.has(barrel)) {
+            return true;
+        }
+        if (reachable.has(barrel)) {
+            return true;
+        }
+        if (index.getImporters(barrel).length > 0) {
+            return true;
+        }
+    }
+    return false;
+}
 export function findUnusedExports(scopedFiles: string[], index: ImportIndex): UnusedExportItem[] {
     const items: UnusedExportItem[] = [];
+
+    const starMap = buildStarReexportMap(index);
+    const reachable = findReachableFiles(index, index.entryPoints);
 
     for (const filePath of scopedFiles) {
         if (!isJavaScriptSource(filePath)) {
             continue;
         }
-
         const content = index.getContent(filePath);
         if (isReexportOnlyBarrel(content, filePath)) {
             continue;
         }
 
+        const starReexported = isReexportedViaAliveBarrel(filePath, index, starMap, reachable);
+
         const exports = extractJavaScriptExports(content, filePath);
         if (exports.length === 0) {
             continue;
         }
-
         const usage = collectJavaScriptExportUsage(index, filePath);
+
         for (const exp of exports) {
             if (exp.isTypeOnly || usage.namespaceImports) {
                 continue;
@@ -126,6 +173,9 @@ export function findUnusedExports(scopedFiles: string[], index: ImportIndex): Un
                 }
                 continue;
             }
+            if (starReexported) {
+                continue;
+            }
             if (!usage.named.has(exp.name)) {
                 items.push(toExportItem(index, filePath, exp));
             }
@@ -134,7 +184,6 @@ export function findUnusedExports(scopedFiles: string[], index: ImportIndex): Un
 
     items.push(...findUnusedPythonExports(scopedFiles, index));
     items.push(...findUnusedJavaExports(scopedFiles, index, index.javaTypeIndex));
-
     return items.sort(
         (a, b) =>
             a.relativePath.localeCompare(b.relativePath) ||
