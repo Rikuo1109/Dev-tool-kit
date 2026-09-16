@@ -1,6 +1,11 @@
+import {
+    blockLineCount,
+    extractCodeBlocks,
+    previewLines,
+    scriptContent,
+} from '../../shared/code-parser';
 import { ImportIndex } from '../../shared/javascript/importGraph';
-import { exactNormalize, extractCodeBlocks, structuralNormalize } from './sourceUtils';
-import { blockLineCount, previewLines, scriptContent } from '../../shared/code-parser';
+import { exactNormalize, structuralNormalize } from './sourceUtils';
 import { CodeAnalyzeConfig, DuplicateGroup, DuplicateLocation } from './types';
 
 interface IndexedBlock {
