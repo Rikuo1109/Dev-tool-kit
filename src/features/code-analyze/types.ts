@@ -17,21 +17,6 @@ export interface EntryPointItem {
     absolutePath: string;
 }
 
-export interface DuplicateLocation {
-    relativePath: string;
-    absolutePath: string;
-    startLine: number;
-    endLine: number;
-}
-
-export interface DuplicateGroup {
-    kind: 'exact' | 'structural';
-    lineCount: number;
-    locations: DuplicateLocation[];
-    suggestion: string;
-    preview: string;
-}
-
 export interface LargeFileItem {
     relativePath: string;
     absolutePath: string;
@@ -58,7 +43,6 @@ export interface CodeAnalyzeReport {
     unusedFiles: AnalyzeFileItem[];
     orphanModules: AnalyzeFileItem[];
     unusedExports: UnusedExportItem[];
-    duplicates: DuplicateGroup[];
     largeFiles: LargeFileItem[];
     largeFunctions: LargeFunctionItem[];
     entryPoints: EntryPointItem[];
@@ -68,7 +52,6 @@ export interface CodeAnalyzeReport {
 export interface CodeAnalyzeConfig {
     entryGlobs: string[];
     excludeGlobs: string[];
-    duplicateMinLines: number;
     largeFileLoc: number;
     largeFunctionLoc: number;
     largeFunctionParams: number;

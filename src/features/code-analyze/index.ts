@@ -1,23 +1,21 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { buildImportIndex } from '../../shared/javascript/importGraph';
+import { isPathInsideFolder, normalizePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
+import { buildImportIndex } from '../../shared/javascript/importGraph';
 import {
     findOrphanModules,
     findUnusedExports,
     findUnusedFiles,
     getAnalyzeConfig,
 } from './deadCode';
-import { findDuplicateCode } from './duplicates';
 import { findLargeFiles, findLargeFunctions } from './largeUnits';
 import { CodeAnalyzePanel } from './panel';
 import { CodeAnalyzeReport } from './types';
-import { isPathInsideFolder, normalizePath } from '../../shared/fs';
 
 export type {
     AnalyzeFileItem,
     CodeAnalyzeReport,
-    DuplicateGroup,
     LargeFileItem,
     LargeFunctionItem,
     UnusedExportItem,
@@ -68,7 +66,6 @@ export async function analyzeCodeInFolder(
                 const unusedExports = findUnusedExports(scopedFiles, index);
 
                 progress.report({ message: 'Detecting duplicate code…' });
-                const duplicates = findDuplicateCode(scopedFiles, index, config);
 
                 progress.report({ message: 'Finding large files and functions…' });
                 const largeFiles = findLargeFiles(scopedFiles, index, config);
@@ -81,7 +78,6 @@ export async function analyzeCodeInFolder(
                     unusedFiles,
                     orphanModules,
                     unusedExports,
-                    duplicates,
                     largeFiles,
                     largeFunctions,
                     entryPoints: [...index.entryPoints]

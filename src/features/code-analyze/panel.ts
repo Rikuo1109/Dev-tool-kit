@@ -8,40 +8,10 @@ import {
     renderPanelHeader,
 } from '../../shared/panel';
 import { getPanelTheme, PanelTheme } from '../../shared/theme';
-import { CodeAnalyzeReport, DuplicateGroup } from './types';
+import { CodeAnalyzeReport } from './types';
 
 function rowDataAttrs(absolutePath: string, line = 0): string {
     return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
-}
-
-function buildDuplicateAiMessage(group: DuplicateGroup): string {
-    const kindLabel =
-        group.kind === 'exact'
-            ? 'Exact duplicate'
-            : 'Structural duplicate (same shape, different names/literals)';
-    const locations = group.locations
-        .map((loc) => `- ${loc.relativePath}:${loc.startLine}-${loc.endLine}`)
-        .join('\n');
-
-    return [
-        'Please help refactor duplicated code in this codebase.',
-        '',
-        `Type: ${kindLabel}`,
-        `Size: ${group.lineCount} lines across ${group.locations.length} locations`,
-        '',
-        'Locations:',
-        locations,
-        '',
-        'Duplicated code preview:',
-        '```',
-        group.preview,
-        '```',
-        '',
-        'Suggested approach:',
-        group.suggestion,
-        '',
-        'Extract shared logic, update all locations to use it, and preserve existing behavior.',
-    ].join('\n');
 }
 
 const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
@@ -178,7 +148,6 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         report.unusedFiles.length +
         report.orphanModules.length +
         report.unusedExports.length +
-        report.duplicates.length +
         report.largeFiles.length +
         report.largeFunctions.length;
     const durationSec = (report.durationMs / 1000).toFixed(1);
@@ -215,36 +184,6 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         <span class="detail">${escapeHtml(item.kind)}</span>
       </button>`,
             )
-            .join('');
-    };
-
-    const renderDuplicateCards = () => {
-        if (report.duplicates.length === 0) {
-            return `<div class="empty">No duplicate blocks above threshold.</div>`;
-        }
-        return report.duplicates
-            .map((group) => {
-                const badgeClass = group.kind === 'exact' ? 'error' : 'warn';
-                const locations = group.locations
-                    .map(
-                        (loc) => `
-          <button type="button" class="loc-btn" ${rowDataAttrs(loc.absolutePath, loc.startLine)}>
-            ${escapeHtml(loc.relativePath)}:${loc.startLine}-${loc.endLine}
-          </button>`,
-                    )
-                    .join('');
-                return `
-        <article class="duplicate-card">
-          <div class="duplicate-head">
-            <span class="badge ${badgeClass}">${group.kind}</span>
-            <span class="detail">${group.lineCount} lines · ${group.locations.length} locations</span>
-            <button type="button" class="copy-ai-btn" data-copy="${encodeURIComponent(buildDuplicateAiMessage(group))}">Copy for AI</button>
-          </div>
-          <pre class="duplicate-preview">${escapeHtml(group.preview)}</pre>
-          <div class="loc-list">${locations}</div>
-          <p class="refactor-tip">${escapeHtml(group.suggestion)}</p>
-        </article>`;
-            })
             .join('');
     };
 
@@ -317,10 +256,6 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
             <div class="label">Unused exports</div>
             <div class="value">${report.unusedExports.length}</div>
           </div>
-          <div class="stat-card error">
-            <div class="label">Duplicates</div>
-            <div class="value">${report.duplicates.length}</div>
-          </div>
           <div class="stat-card warn">
             <div class="label">Large files</div>
             <div class="value">${report.largeFiles.length}</div>
@@ -335,7 +270,6 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
           <button type="button" class="tab active" data-tab="unused-files">Unused (${report.unusedFiles.length})</button>
           <button type="button" class="tab" data-tab="orphans">Orphans (${report.orphanModules.length})</button>
           <button type="button" class="tab" data-tab="exports">Exports (${report.unusedExports.length})</button>
-          <button type="button" class="tab" data-tab="duplicates">Duplicates (${report.duplicates.length})</button>
           <button type="button" class="tab" data-tab="large-files">Large files (${report.largeFiles.length})</button>
           <button type="button" class="tab" data-tab="large-functions">Large fn (${report.largeFunctions.length})</button>
         </div>
@@ -349,9 +283,6 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
       </div>
       <div class="panel" id="panel-exports">
         <div class="list">${renderExportRows()}</div>
-      </div>
-      <div class="panel" id="panel-duplicates">
-        ${renderDuplicateCards()}
       </div>
       <div class="panel" id="panel-large-files">
         ${renderLargeFileRows()}

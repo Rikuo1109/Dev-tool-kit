@@ -48,7 +48,6 @@ export function getAnalyzeConfig(): CodeAnalyzeConfig {
     return {
         entryGlobs: readArray('entryGlobs', DEFAULT_ENTRY_GLOBS),
         excludeGlobs: readArray('excludeGlobs', DEFAULT_EXCLUDE_GLOBS),
-        duplicateMinLines: config.get<number>('duplicateMinLines', 6),
         largeFileLoc: config.get<number>('largeFileLoc', 300),
         largeFunctionLoc: config.get<number>('largeFunctionLoc', 80),
         largeFunctionParams: config.get<number>('largeFunctionParams', 5),

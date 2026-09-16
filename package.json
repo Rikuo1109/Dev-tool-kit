@@ -99,12 +99,6 @@
                     ],
                     "description": "Glob patterns excluded from code analyze."
                 },
-                "kyo-tools.codeAnalyze.duplicateMinLines": {
-                    "type": "number",
-                    "default": 6,
-                    "minimum": 3,
-                    "description": "Minimum non-empty lines for duplicate code detection."
-                },
                 "kyo-tools.codeAnalyze.largeFileLoc": {
                     "type": "number",
                     "default": 300,
