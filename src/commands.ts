@@ -5,7 +5,6 @@ import { openDashboard } from './features/dashboard';
 import { openDeadCodeExplorer } from './features/dead-code-explorer';
 import { initAiTemplate } from './features/init-ai-template';
 import { organizeImportsInFolder } from './features/organize-imports';
-import { openPreMergeReview } from './features/pre-merge-review';
 import { resolveFolderUri } from './shared/resolveUri';
 
 interface CommandDefinition {
@@ -80,14 +79,6 @@ const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
         resolveFolderFromWorkspace: true,
         handler: async (uri) => {
             await openDeadCodeExplorer(uri!);
-        },
-    },
-    {
-        id: 'kyo-tools.preMergeReview',
-        errorTitle: 'Pre-merge review failed',
-        resolveFolderFromWorkspace: true,
-        handler: async (uri) => {
-            await openPreMergeReview(uri);
         },
     },
 ];

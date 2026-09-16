@@ -46,11 +46,6 @@
                 "command": "kyo-tools.deadCodeExplorer",
                 "title": "Dead Code Explorer",
                 "category": "Kyo Tools"
-            },
-            {
-                "command": "kyo-tools.preMergeReview",
-                "title": "Pre-Merge Review",
-                "category": "Kyo Tools"
             }
         ],
         "configuration": {
@@ -240,10 +235,6 @@
                 },
                 {
                     "command": "kyo-tools.deadCodeExplorer",
-                    "when": "workspaceFolderCount != 0"
-                },
-                {
-                    "command": "kyo-tools.preMergeReview",
                     "when": "workspaceFolderCount != 0"
                 }
             ],
