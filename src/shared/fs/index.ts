@@ -1,2 +1,2 @@
-export * from './pathUtils';
 export * from './fileReader';
+export * from './pathUtils';

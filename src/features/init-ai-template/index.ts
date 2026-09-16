@@ -1,15 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getTemplateFiles } from './templates';
 import {
     formatCommandError,
     isGitRepository,
     runGitNexusAnalyze,
     runGitNexusSetup,
-    writeTextFile,
     WriteResult,
+    writeTextFile,
 } from './runners';
+import { getTemplateFiles } from './templates';
 
 interface InitStepResult {
     label: string;

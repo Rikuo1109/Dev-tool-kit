@@ -1,3 +1,14 @@
+import { escapeHtml } from '../../shared/html';
+import {
+    panelContentStyles,
+    panelDocument,
+    panelWebviewCsp,
+    renderPanelHeader,
+} from '../../shared/panel';
+import { getPanelTheme } from '../../shared/theme';
+import { GitChangeStats, formatGitChartLabels } from './gitChanges';
+import { TodoItem } from './todos';
+
 interface ClocFileEntry {
     blank: number;
     comment: number;
@@ -22,17 +33,6 @@ export interface LangStat {
     topFiles: FileStat[];
     smallestFiles: FileStat[];
 }
-
-import { GitChangeStats, formatGitChartLabels } from './gitChanges';
-import { TodoItem } from './todos';
-import { escapeHtml } from '../../shared/html';
-import {
-    panelContentStyles,
-    panelDocument,
-    panelWebviewCsp,
-    renderPanelHeader,
-} from '../../shared/panel';
-import { getPanelTheme } from '../../shared/theme';
 
 export interface DashboardData {
     folderName: string;

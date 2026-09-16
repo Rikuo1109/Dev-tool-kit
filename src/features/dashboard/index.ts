@@ -1,13 +1,13 @@
-import { readdirSync, readFileSync, statSync } from 'fs';
+import { readdirSync, statSync } from 'fs';
 import { extname, join, relative } from 'path';
 import * as vscode from 'vscode';
-import { isGitRepository, findGitRoot, filterGitIgnoredPaths } from '../../shared/gitignore';
+import { readFileSafe } from '../../shared/fs';
+import { filterGitIgnoredPaths, findGitRoot, isGitRepository } from '../../shared/gitignore';
 import { isDarkTheme } from '../../shared/html';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { getDashboardHtml, parseClocData } from './cloc';
 import { getAggregatedGitChangeStats } from './gitChanges';
 import { rankTodos, scanTodosInContent, TodoItem } from './todos';
-import { readFileSafe } from '../../shared/fs';
 
 interface FolderScanResult {
     raw: Record<string, unknown>;

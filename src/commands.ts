@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import { openDashboard } from './features/dashboard';
-import { openCodeGraph } from './features/code-graph';
 import { analyzeCodeInFolder } from './features/code-analyze';
+import { openCodeGraph } from './features/code-graph';
+import { openDashboard } from './features/dashboard';
 import { openDeadCodeExplorer } from './features/dead-code-explorer';
-import { openPreMergeReview } from './features/pre-merge-review';
-import { organizeImportsInFolder } from './features/organize-imports';
 import { initAiTemplate } from './features/init-ai-template';
+import { organizeImportsInFolder } from './features/organize-imports';
+import { openPreMergeReview } from './features/pre-merge-review';
 import { resolveFolderUri } from './shared/resolveUri';
 
 interface CommandDefinition {

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { resolvePythonModule } from './graph';
 import { readFileSafe } from '../fs';
+import { resolvePythonModule } from './graph';
 
 const SCRIPT_SECTION_RE = /\[(?:project\.scripts|tool\.poetry\.scripts)\]([\s\S]*?)(?:\n\[|$)/g;
 const SCRIPT_ENTRY_RE = /^\s*[\w.-]+\s*=\s*["']([\w.]+):[\w.]+["']/gm;
