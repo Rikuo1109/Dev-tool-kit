@@ -118,9 +118,7 @@ export interface CodeAnalyzeReport {
     deadClasses: DeadItem[];
     deadFunctions: DeadItem[];
     deadConstants: DeadItem[];
-    deadRoutes: DeadItem[];
-    deadApis: DeadItem[];
-    deadCss: DeadItem[];
+
     discoveredEntries: string[];
     durationMs: number;
 }

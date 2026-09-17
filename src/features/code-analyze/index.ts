@@ -6,7 +6,6 @@ import { buildImportIndex } from '../../shared/javascript/importGraph';
 import { buildAssetGraph } from './dead-explorer/assetGraph';
 import { classifyDeadFiles } from './dead-explorer/classifyFiles';
 import { discoverBundlerEntries } from './dead-explorer/entryDiscovery';
-import { findDeadApis, findDeadCss, findDeadRoutes } from './dead-explorer/heuristics';
 import {
     findOrphanModules,
     findUnusedExports,
@@ -156,13 +155,6 @@ export async function analyzeCodeInFolder(
                 progress.report({ message: 'Finding unused exports by kind…' });
                 const { deadClasses, deadFunctions, deadConstants } = groupExports(unusedExports);
 
-                progress.report({ message: 'Scanning routes, APIs, CSS…' });
-                const [deadRoutes, deadApis, deadCss] = await Promise.all([
-                    findDeadRoutes(folderPath, index),
-                    findDeadApis(folderPath, index),
-                    findDeadCss(folderUri, folderPath, index),
-                ]);
-
                 return {
                     folderName,
                     folderPath,
@@ -184,9 +176,7 @@ export async function analyzeCodeInFolder(
                     deadClasses,
                     deadFunctions,
                     deadConstants,
-                    deadRoutes,
-                    deadApis,
-                    deadCss,
+
                     discoveredEntries: discovered.entries.map((abs) => index.relativePath(abs)),
                     durationMs: Date.now() - startedAt,
                 } satisfies CodeAnalyzeReport;

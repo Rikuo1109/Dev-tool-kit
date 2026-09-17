@@ -228,7 +228,7 @@ export function findUnusedExports(scopedFiles: string[], index: ImportIndex): Un
                 continue;
             }
             if (exp.isDefault) {
-                if (!usage.defaultImport) {
+                if (!usage.defaultImport && !usage.named.has('default')) {
                     items.push(toExportItem(index, filePath, exp));
                 }
                 continue;

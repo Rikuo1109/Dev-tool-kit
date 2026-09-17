@@ -222,10 +222,7 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         report.deadFiles.length +
         report.deadClasses.length +
         report.deadFunctions.length +
-        report.deadConstants.length +
-        report.deadRoutes.length +
-        report.deadApis.length +
-        report.deadCss.length;
+        report.deadConstants.length;
     const durationSec = (report.durationMs / 1000).toFixed(1);
     const bannerClass = totalIssues > 0 ? 'warn' : 'success';
 
@@ -392,9 +389,6 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         { id: 'classes', label: 'Classes', count: report.deadClasses.length },
         { id: 'functions', label: 'Functions', count: report.deadFunctions.length },
         { id: 'constants', label: 'Constants', count: report.deadConstants.length },
-        { id: 'routes', label: 'Routes', count: report.deadRoutes.length },
-        { id: 'apis', label: 'API', count: report.deadApis.length },
-        { id: 'css', label: 'CSS', count: report.deadCss.length },
     ];
 
     return panelDocument({
@@ -493,15 +487,7 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
       <div class="panel" id="panel-constants">
         <div class="list">${renderDeadRows(report.deadConstants, 'No dead constants found.')}</div>
       </div>
-      <div class="panel" id="panel-routes">
-        <div class="list">${renderDeadRows(report.deadRoutes, 'No dead routes found.')}</div>
-      </div>
-      <div class="panel" id="panel-apis">
-        <div class="list">${renderDeadRows(report.deadApis, 'No dead APIs found.')}</div>
-      </div>
-      <div class="panel" id="panel-css">
-        <div class="list">${renderDeadRows(report.deadCss, 'No dead CSS classes found.')}</div>
-      </div>
+
 
       <p class="note">
         Click rows to open files. Configure thresholds in
