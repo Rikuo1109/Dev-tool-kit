@@ -3,8 +3,6 @@ import * as vscode from 'vscode';
 import { isPathInsideFolder, normalizePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
 import { buildImportIndex } from '../../shared/javascript/importGraph';
-import { buildAssetGraph } from './dead-explorer/assetGraph';
-import { classifyDeadFiles } from './dead-explorer/classifyFiles';
 import { discoverBundlerEntries } from './dead-explorer/entryDiscovery';
 import {
     findOrphanModules,
@@ -134,24 +132,6 @@ export async function analyzeCodeInFolder(
                 const largeFiles = findLargeFiles(scopedFiles, index, config);
                 const largeFunctions = findLargeFunctions(scopedFiles, index, config);
 
-                progress.report({ message: 'Building runtime asset graph…' });
-                const assetGraph = await buildAssetGraph(
-                    workspaceFolder,
-                    workspaceFolder.uri.fsPath,
-                    index,
-                );
-
-                progress.report({ message: 'Classifying files…' });
-                const classified = classifyDeadFiles({
-                    scopedFiles,
-                    index,
-                    config: explorerConfig,
-                    discoveredEntries: discovered.entries,
-                    entryLabels: discovered.labels,
-                    assetGraph,
-                    primaryBuckets: explorerConfig.primaryBuckets,
-                });
-
                 progress.report({ message: 'Finding unused exports by kind…' });
                 const { deadClasses, deadFunctions, deadConstants } = groupExports(unusedExports);
 
@@ -170,9 +150,6 @@ export async function analyzeCodeInFolder(
                             relativePath: index.relativePath(entry),
                             absolutePath: entry,
                         })),
-                    deadFiles: classified.primary,
-                    allDeadFiles: classified.all,
-                    filesSummary: classified.summary,
                     deadClasses,
                     deadFunctions,
                     deadConstants,

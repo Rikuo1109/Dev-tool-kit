@@ -112,9 +112,6 @@ export interface CodeAnalyzeReport {
     largeFiles: LargeFileItem[];
     largeFunctions: LargeFunctionItem[];
     entryPoints: EntryPointItem[];
-    deadFiles: DeadItem[];
-    allDeadFiles: DeadItem[];
-    filesSummary: FilesSummary;
     deadClasses: DeadItem[];
     deadFunctions: DeadItem[];
     deadConstants: DeadItem[];

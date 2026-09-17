@@ -1,4 +1,4 @@
-const TODO_RE = /\b(TODO|FIXME)\b/i;
+const TODO_RE = /(?:\/\/|\/?\*|#).*\b(TODO|FIXME)\b/i;
 const TODO_DISPLAY_LIMIT = 50;
 const PREVIEW_MAX = 120;
 
