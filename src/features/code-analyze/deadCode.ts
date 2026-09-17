@@ -4,7 +4,14 @@ import { isActiveBarrel, isReexportOnlyBarrel } from '../../shared/javascript/ba
 import { ImportIndex, findReachableFiles } from '../../shared/javascript/importGraph';
 import { findUnusedJavaExports } from './javaExports';
 import { findUnusedPythonExports } from './pythonExports';
-import { AnalyzeFileItem, CodeAnalyzeConfig, UnusedExportItem } from './types';
+import {
+    AnalyzeFileItem,
+    CodeAnalyzeConfig,
+    DeadBucket,
+    DeadCodeExplorerConfig,
+    PRIMARY_BUCKETS,
+    UnusedExportItem,
+} from './types';
 import { lineAt, scriptContent } from '../../shared/code-parser';
 
 const DEFAULT_ENTRY_GLOBS = [
@@ -51,6 +58,59 @@ export function getAnalyzeConfig(): CodeAnalyzeConfig {
         largeFileLoc: config.get<number>('largeFileLoc', 300),
         largeFunctionLoc: config.get<number>('largeFunctionLoc', 80),
         largeFunctionParams: config.get<number>('largeFunctionParams', 5),
+    };
+}
+
+const DEFAULT_DEAD_ENTRY_GLOBS = [
+    '**/mobile.{js,jsx,ts,tsx}',
+    '**/App/mobile.{tsx,jsx,ts,js}',
+    '**/index.{js,jsx,ts,tsx}',
+    '**/main.{js,jsx,ts,tsx}',
+];
+
+const DEFAULT_IGNORE_GLOBS = [
+    '**/node_modules/**',
+    '**/*.min.js',
+    '**/*.{test,spec}.{js,jsx,ts,tsx}',
+    '**/*.stories.{js,jsx,ts,tsx}',
+    '**/__tests__/**',
+    '**/__mocks__/**',
+    '**/.eslintrc*',
+    '**/prettier*',
+    '**/generate-react-cli/**',
+    '**/*TemplateName*',
+];
+
+const DEFAULT_VENDOR_GLOBS = ['public/**/tinymce*/**', 'public/assets/**', '**/vendor/**'];
+
+const DEFAULT_TOOLING_GLOBS = [
+    'tools/**',
+    'scripts/**',
+    '**/webpack*.{js,ts,cjs,mjs}',
+    '**/vite.config.*',
+    '**/jest.config.*',
+    '**/babel.config.*',
+    '**/*.config.{js,cjs,mjs,ts}',
+];
+
+const DEFAULT_AMBIENT_GLOBS = ['**/*.d.ts', '**/react-app-env.d.ts'];
+
+export function getDeadCodeExplorerConfig(): DeadCodeExplorerConfig {
+    const config = vscode.workspace.getConfiguration('kyo-tools.deadCodeExplorer');
+
+    const readArray = (key: string, fallback: string[]): string[] =>
+        config.get<string[]>(key, fallback);
+
+    const primary = config.get<DeadBucket[]>('primaryBuckets', [...PRIMARY_BUCKETS]);
+
+    return {
+        entryGlobs: readArray('entryGlobs', DEFAULT_DEAD_ENTRY_GLOBS),
+        ignoreGlobs: readArray('ignoreGlobs', DEFAULT_IGNORE_GLOBS),
+        vendorGlobs: readArray('vendorGlobs', DEFAULT_VENDOR_GLOBS),
+        toolingGlobs: readArray('toolingGlobs', DEFAULT_TOOLING_GLOBS),
+        ambientGlobs: readArray('ambientGlobs', DEFAULT_AMBIENT_GLOBS),
+        primaryBuckets: primary.length > 0 ? primary : [...PRIMARY_BUCKETS],
+        discoverBundlerEntries: config.get<boolean>('discoverBundlerEntries', true),
     };
 }
 

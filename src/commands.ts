@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { analyzeCodeInFolder } from './features/code-analyze';
 import { openCodeGraph } from './features/code-graph';
 import { openDashboard } from './features/dashboard';
-import { openDeadCodeExplorer } from './features/dead-code-explorer';
 import { initAiTemplate } from './features/init-ai-template';
 import { organizeImportsInFolder } from './features/organize-imports';
 import { resolveFolderUri } from './shared/resolveUri';
@@ -71,14 +70,6 @@ const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
         resolveFolderFromWorkspace: true,
         handler: async (uri) => {
             await analyzeCodeInFolder(uri!);
-        },
-    },
-    {
-        id: 'kyo-tools.deadCodeExplorer',
-        errorTitle: 'Dead Code Explorer failed',
-        resolveFolderFromWorkspace: true,
-        handler: async (uri) => {
-            await openDeadCodeExplorer(uri!);
         },
     },
 ];

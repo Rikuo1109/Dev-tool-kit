@@ -1,4 +1,4 @@
-import { lineAt } from '../../shared/code-parser';
+import { lineAt } from '../../../shared/code-parser';
 
 const ROUTE_SKIP_NAMES = new Set([
     '_app',

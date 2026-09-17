@@ -1,8 +1,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { EXCLUDE_GLOB } from '../../shared/constants';
-import { isPathInsideFolder, normalizePath } from '../../shared/fs';
-import { ImportIndex } from '../../shared/javascript/importGraph';
+import { EXCLUDE_GLOB } from '../../../shared/constants';
+import { isPathInsideFolder, normalizePath } from '../../../shared/fs';
+import { ImportIndex } from '../../../shared/javascript/importGraph';
+import { escapeRegExp } from '../../../shared/string';
+import { DeadItem } from '../types';
 import {
     extractApiHandlers,
     extractClientApiRefs,
@@ -12,8 +14,6 @@ import {
     fileToRoutePath,
     pathReferenced,
 } from './extract';
-import { DeadItem } from './types';
-import { escapeRegExp } from '../../shared/string';
 
 export async function findDeadRoutes(folderPath: string, index: ImportIndex): Promise<DeadItem[]> {
     const refs = new Set<string>();

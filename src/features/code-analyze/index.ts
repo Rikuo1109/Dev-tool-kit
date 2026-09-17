@@ -3,19 +3,65 @@ import * as vscode from 'vscode';
 import { isPathInsideFolder, normalizePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
 import { buildImportIndex } from '../../shared/javascript/importGraph';
+import { buildAssetGraph } from './dead-explorer/assetGraph';
+import { classifyDeadFiles } from './dead-explorer/classifyFiles';
+import { discoverBundlerEntries } from './dead-explorer/entryDiscovery';
+import { findDeadApis, findDeadCss, findDeadRoutes } from './dead-explorer/heuristics';
 import {
     findOrphanModules,
     findUnusedExports,
     findUnusedFiles,
     getAnalyzeConfig,
+    getDeadCodeExplorerConfig,
 } from './deadCode';
 import { findLargeFiles, findLargeFunctions } from './largeUnits';
 import { CodeAnalyzePanel } from './panel';
-import { CodeAnalyzeReport } from './types';
+import { CodeAnalyzeReport, DeadItem, UnusedExportItem } from './types';
+
+const CLASS_KINDS = new Set(['class']);
+const FUNCTION_KINDS = new Set(['function', 'named', 'default', 'method']);
+const CONSTANT_KINDS = new Set(['const', 'let', 'var', 'enum']);
+
+function toDeadItem(item: UnusedExportItem): DeadItem {
+    return {
+        relativePath: item.relativePath,
+        absolutePath: item.absolutePath,
+        name: item.exportName,
+        detail: item.kind,
+        line: item.line,
+        bucket: 'dead',
+        confidence: 'medium',
+        reason: 'export_unused',
+        falsePositiveHint: 'Export may be used via dynamic import or re-export aliases.',
+    };
+}
+
+function groupExports(unusedExports: UnusedExportItem[]): {
+    deadClasses: DeadItem[];
+    deadFunctions: DeadItem[];
+    deadConstants: DeadItem[];
+} {
+    const deadClasses: DeadItem[] = [];
+    const deadFunctions: DeadItem[] = [];
+    const deadConstants: DeadItem[] = [];
+
+    for (const item of unusedExports) {
+        if (CLASS_KINDS.has(item.kind)) {
+            deadClasses.push(toDeadItem(item));
+        } else if (CONSTANT_KINDS.has(item.kind)) {
+            deadConstants.push(toDeadItem(item));
+        } else if (FUNCTION_KINDS.has(item.kind)) {
+            deadFunctions.push(toDeadItem(item));
+        }
+    }
+
+    return { deadClasses, deadFunctions, deadConstants };
+}
 
 export type {
     AnalyzeFileItem,
     CodeAnalyzeReport,
+    DeadItem,
     LargeFileItem,
     LargeFunctionItem,
     UnusedExportItem,
@@ -33,6 +79,7 @@ export async function analyzeCodeInFolder(
     const folderPath = normalizePath(folderUri.fsPath);
     const folderName = path.basename(folderPath);
     const config = getAnalyzeConfig();
+    const explorerConfig = getDeadCodeExplorerConfig();
     const isDark = isDarkTheme();
     const panel = existingPanel ?? CodeAnalyzePanel.open(folderName, isDark);
     panel.bindFolder(folderUri, () => analyzeCodeInFolder(folderUri, panel));
@@ -49,12 +96,29 @@ export async function analyzeCodeInFolder(
                 cancellable: false,
             },
             async (progress) => {
+                progress.report({ message: 'Discovering entries…' });
+                const entryGlobs = [...config.entryGlobs, ...explorerConfig.entryGlobs];
+                const discovered = explorerConfig.discoverBundlerEntries
+                    ? await discoverBundlerEntries(
+                          workspaceFolder,
+                          workspaceFolder.uri.fsPath,
+                          explorerConfig.entryGlobs,
+                      )
+                    : { entries: [] as string[], labels: new Map<string, string>() };
+
                 progress.report({ message: 'Building import graph…' });
                 const index = await buildImportIndex(
                     workspaceFolder,
-                    config.entryGlobs,
+                    entryGlobs,
                     config.excludeGlobs,
                 );
+
+                for (const entry of discovered.entries) {
+                    index.entryPoints.add(entry);
+                    if (!discovered.labels.has(entry)) {
+                        discovered.labels.set(entry, 'discovered entry');
+                    }
+                }
 
                 const scopedFiles = index.files.filter((file) =>
                     isPathInsideFolder(file, folderPath),
@@ -71,6 +135,34 @@ export async function analyzeCodeInFolder(
                 const largeFiles = findLargeFiles(scopedFiles, index, config);
                 const largeFunctions = findLargeFunctions(scopedFiles, index, config);
 
+                progress.report({ message: 'Building runtime asset graph…' });
+                const assetGraph = await buildAssetGraph(
+                    workspaceFolder,
+                    workspaceFolder.uri.fsPath,
+                    index,
+                );
+
+                progress.report({ message: 'Classifying files…' });
+                const classified = classifyDeadFiles({
+                    scopedFiles,
+                    index,
+                    config: explorerConfig,
+                    discoveredEntries: discovered.entries,
+                    entryLabels: discovered.labels,
+                    assetGraph,
+                    primaryBuckets: explorerConfig.primaryBuckets,
+                });
+
+                progress.report({ message: 'Finding unused exports by kind…' });
+                const { deadClasses, deadFunctions, deadConstants } = groupExports(unusedExports);
+
+                progress.report({ message: 'Scanning routes, APIs, CSS…' });
+                const [deadRoutes, deadApis, deadCss] = await Promise.all([
+                    findDeadRoutes(folderPath, index),
+                    findDeadApis(folderPath, index),
+                    findDeadCss(folderUri, folderPath, index),
+                ]);
+
                 return {
                     folderName,
                     folderPath,
@@ -86,6 +178,16 @@ export async function analyzeCodeInFolder(
                             relativePath: index.relativePath(entry),
                             absolutePath: entry,
                         })),
+                    deadFiles: classified.primary,
+                    allDeadFiles: classified.all,
+                    filesSummary: classified.summary,
+                    deadClasses,
+                    deadFunctions,
+                    deadConstants,
+                    deadRoutes,
+                    deadApis,
+                    deadCss,
+                    discoveredEntries: discovered.entries.map((abs) => index.relativePath(abs)),
                     durationMs: Date.now() - startedAt,
                 } satisfies CodeAnalyzeReport;
             },

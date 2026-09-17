@@ -41,11 +41,6 @@
                 "command": "kyo-tools.codeAnalyze",
                 "title": "Code Analyze",
                 "category": "Kyo Tools"
-            },
-            {
-                "command": "kyo-tools.deadCodeExplorer",
-                "title": "Dead Code Explorer",
-                "category": "Kyo Tools"
             }
         ],
         "configuration": {
@@ -111,103 +106,6 @@
                     "default": 5,
                     "minimum": 2,
                     "description": "Warn when a function has more than this many parameters."
-                },
-                "kyo-tools.deadCodeExplorer.entryGlobs": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": [
-                        "**/mobile.{js,jsx,ts,tsx}",
-                        "**/App/mobile.{tsx,jsx,ts,js}",
-                        "**/index.{js,jsx,ts,tsx}",
-                        "**/main.{js,jsx,ts,tsx}"
-                    ],
-                    "description": "Extra entry globs merged with codeAnalyze.entryGlobs for reachability."
-                },
-                "kyo-tools.deadCodeExplorer.ignoreGlobs": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": [
-                        "**/node_modules/**",
-                        "**/*.min.js",
-                        "**/*.{test,spec}.{js,jsx,ts,tsx}",
-                        "**/*.stories.{js,jsx,ts,tsx}",
-                        "**/__tests__/**",
-                        "**/__mocks__/**",
-                        "**/.eslintrc*",
-                        "**/prettier*",
-                        "**/generate-react-cli/**",
-                        "**/*TemplateName*"
-                    ],
-                    "description": "Path globs classified out of primary dead Files (bucket unknown)."
-                },
-                "kyo-tools.deadCodeExplorer.vendorGlobs": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": [
-                        "public/**/tinymce*/**",
-                        "public/assets/**",
-                        "**/vendor/**"
-                    ],
-                    "description": "Path globs classified as vendor."
-                },
-                "kyo-tools.deadCodeExplorer.toolingGlobs": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": [
-                        "tools/**",
-                        "scripts/**",
-                        "**/webpack*.{js,ts,cjs,mjs}",
-                        "**/vite.config.*",
-                        "**/jest.config.*",
-                        "**/babel.config.*",
-                        "**/*.config.{js,cjs,mjs,ts}"
-                    ],
-                    "description": "Path globs classified as tooling."
-                },
-                "kyo-tools.deadCodeExplorer.ambientGlobs": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": [
-                        "**/*.d.ts",
-                        "**/react-app-env.d.ts"
-                    ],
-                    "description": "Path globs classified as ambient types."
-                },
-                "kyo-tools.deadCodeExplorer.primaryBuckets": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "enum": [
-                            "dead",
-                            "likely-dead",
-                            "runtime",
-                            "entry",
-                            "tooling",
-                            "ambient",
-                            "vendor",
-                            "unknown"
-                        ]
-                    },
-                    "default": [
-                        "dead",
-                        "likely-dead"
-                    ],
-                    "description": "Buckets shown in the primary Files list."
-                },
-                "kyo-tools.deadCodeExplorer.discoverBundlerEntries": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Parse webpack/vite/package.json for additional entry points."
                 }
             }
         },
@@ -232,10 +130,6 @@
                 {
                     "command": "kyo-tools.codeAnalyze",
                     "when": "workspaceFolderCount != 0"
-                },
-                {
-                    "command": "kyo-tools.deadCodeExplorer",
-                    "when": "workspaceFolderCount != 0"
                 }
             ],
             "explorer/context": [
@@ -248,11 +142,6 @@
                     "command": "kyo-tools.codeAnalyze",
                     "when": "explorerResourceIsFolder",
                     "group": "2_z_kyoTools@2"
-                },
-                {
-                    "command": "kyo-tools.deadCodeExplorer",
-                    "when": "explorerResourceIsFolder",
-                    "group": "2_z_kyoTools@3"
                 },
                 {
                     "command": "kyo-tools.organizeImports",

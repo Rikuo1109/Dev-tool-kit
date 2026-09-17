@@ -1,4 +1,4 @@
-import { escapeRegExp } from '../../shared/string';
+import { escapeRegExp } from '../../../shared/string';
 
 function matchGlob(relativePath: string, pattern: string): boolean {
     const path = relativePath.replace(/\\/g, '/');

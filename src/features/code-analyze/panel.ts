@@ -8,7 +8,7 @@ import {
     renderPanelHeader,
 } from '../../shared/panel';
 import { getPanelTheme, PanelTheme } from '../../shared/theme';
-import { CodeAnalyzeReport } from './types';
+import { CodeAnalyzeReport, DeadBucket, DeadItem, PRIMARY_BUCKETS } from './types';
 
 function rowDataAttrs(absolutePath: string, line = 0): string {
     return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
@@ -28,11 +28,80 @@ function panelExtraStyles(t: PanelTheme): string {
       border-bottom: 1px solid ${t.border};
     }
 
-    .stats.six-up {
-      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    .stats.seven-up {
+      grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
     }
 
     .stat-card .value { font-size: 1rem; }
+
+    .summary-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 6px 0 8px;
+      font-size: 0.68rem;
+      color: ${t.muted};
+    }
+
+    .summary-pill {
+      border: 1px solid ${t.border};
+      background: ${t.surface};
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+
+    .summary-pill.noise {
+      border-color: transparent;
+      background: ${t.accentSoft};
+      color: ${t.text};
+    }
+
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 0.68rem;
+    }
+
+    .filter-row label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: ${t.muted};
+      cursor: pointer;
+    }
+
+    .row-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      width: 100%;
+      margin-top: 2px;
+    }
+
+    .hint {
+      font-size: 0.62rem;
+      color: ${t.muted};
+      font-style: italic;
+    }
+
+    .badge.bucket-dead { background: #dc262622; color: #dc2626; }
+    .badge.bucket-likely-dead { background: #d9770622; color: #d97706; }
+    .badge.bucket-runtime,
+    .badge.bucket-entry { background: #2563eb22; color: #2563eb; }
+    .badge.bucket-tooling,
+    .badge.bucket-ambient,
+    .badge.bucket-vendor,
+    .badge.bucket-unknown { background: ${t.surfaceHover}; color: ${t.muted}; }
+
+    .badge.conf-high { border: 1px solid #16a34a55; }
+    .badge.conf-medium { border: 1px solid #d9770655; }
+    .badge.conf-low { border: 1px solid #dc262655; }
+
+    .noise-panel { display: none; }
+    .noise-panel.visible { display: block; }
 
     .duplicate-card,
     .refactor-card {
@@ -149,9 +218,27 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
         report.orphanModules.length +
         report.unusedExports.length +
         report.largeFiles.length +
-        report.largeFunctions.length;
+        report.largeFunctions.length +
+        report.deadFiles.length +
+        report.deadClasses.length +
+        report.deadFunctions.length +
+        report.deadConstants.length +
+        report.deadRoutes.length +
+        report.deadApis.length +
+        report.deadCss.length;
     const durationSec = (report.durationMs / 1000).toFixed(1);
     const bannerClass = totalIssues > 0 ? 'warn' : 'success';
+
+    const noiseItems = report.allDeadFiles.filter(
+        (item) => !PRIMARY_BUCKETS.includes(item.bucket ?? 'unknown'),
+    );
+
+    const entriesNote =
+        report.discoveredEntries.length > 0
+            ? `Entries: ${report.discoveredEntries.slice(0, 8).map(escapeHtml).join(', ')}${
+                  report.discoveredEntries.length > 8 ? '…' : ''
+              }`
+            : 'Entries: (none discovered beyond analyze globs)';
 
     const renderFileRows = (
         items: { relativePath: string; absolutePath: string; detail?: string }[],
@@ -228,6 +315,88 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
             .join('');
     };
 
+    const renderDeadFileRows = (items: DeadItem[], emptyMsg: string): string => {
+        if (items.length === 0) {
+            return `<div class="empty">${emptyMsg}</div>`;
+        }
+        return items
+            .map((item) => {
+                const bucket = item.bucket ?? 'unknown';
+                const confidence = item.confidence ?? 'medium';
+                return `
+    <button type="button" class="row" ${rowDataAttrs(item.absolutePath, item.line ?? 0)} data-bucket="${bucket}">
+      <span class="path">${escapeHtml(item.relativePath)}</span>
+      ${item.name ? `<span class="badge error">${escapeHtml(item.name)}</span>` : ''}
+      <div class="row-meta">
+        <span class="badge bucket-${bucket}">${escapeHtml(bucket)}</span>
+        <span class="badge conf-${confidence}">${escapeHtml(confidence)}</span>
+        ${item.reason ? `<span class="detail">${escapeHtml(item.reason)}</span>` : ''}
+        ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ''}
+        ${
+            item.falsePositiveHint
+                ? `<span class="hint">${escapeHtml(item.falsePositiveHint)}</span>`
+                : ''
+        }
+      </div>
+    </button>`;
+            })
+            .join('');
+    };
+
+    const renderDeadRows = (items: DeadItem[], emptyMsg: string): string => {
+        if (items.length === 0) {
+            return `<div class="empty">${emptyMsg}</div>`;
+        }
+        return items
+            .map(
+                (item) => `
+    <button type="button" class="row" ${rowDataAttrs(item.absolutePath, item.line ?? 0)}>
+      <span class="path">${escapeHtml(item.relativePath)}</span>
+      ${item.name ? `<span class="badge error">${escapeHtml(item.name)}</span>` : ''}
+      ${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ''}
+    </button>`,
+            )
+            .join('');
+    };
+
+    const bucketPills = (): string => {
+        const order: DeadBucket[] = [
+            'dead',
+            'likely-dead',
+            'runtime',
+            'entry',
+            'tooling',
+            'ambient',
+            'vendor',
+            'unknown',
+        ];
+        return order
+            .map((bucket) => {
+                const count = report.filesSummary.byBucket[bucket];
+                if (!count) {
+                    return '';
+                }
+                return `<span class="summary-pill">${bucket}: ${count}</span>`;
+            })
+            .filter(Boolean)
+            .join('');
+    };
+
+    const tabs: Array<{ id: string; label: string; count: number }> = [
+        { id: 'unused-files', label: 'Unused files', count: report.unusedFiles.length },
+        { id: 'orphans', label: 'Orphans', count: report.orphanModules.length },
+        { id: 'exports', label: 'Exports', count: report.unusedExports.length },
+        { id: 'large-files', label: 'Large files', count: report.largeFiles.length },
+        { id: 'large-functions', label: 'Large fn', count: report.largeFunctions.length },
+        { id: 'files', label: 'Files', count: report.deadFiles.length },
+        { id: 'classes', label: 'Classes', count: report.deadClasses.length },
+        { id: 'functions', label: 'Functions', count: report.deadFunctions.length },
+        { id: 'constants', label: 'Constants', count: report.deadConstants.length },
+        { id: 'routes', label: 'Routes', count: report.deadRoutes.length },
+        { id: 'apis', label: 'API', count: report.deadApis.length },
+        { id: 'css', label: 'CSS', count: report.deadCss.length },
+    ];
+
     return panelDocument({
         title: 'Code Analyze',
         styles: `${panelContentStyles(t)}${panelExtraStyles(t)}`,
@@ -235,7 +404,7 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
       <div class="sticky-chrome">
         ${renderPanelHeader(
             `Code Analyze — ${escapeHtml(report.folderName)}`,
-            `${report.scannedFiles} files scanned in ${durationSec}s`,
+            `${report.scannedFiles} files scanned in ${durationSec}s · ${escapeHtml(entriesNote)}`,
             reloadBtn,
         )}
 
@@ -243,7 +412,13 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
           ${totalIssues > 0 ? `${totalIssues} issue(s) found — review tabs below` : 'No issues detected in this folder'}
         </div>
 
-        <div class="stats six-up">
+        <div class="summary-bar">
+          <span class="summary-pill noise">Files noise (vendor/tooling/…): ${report.filesSummary.noisePercent}% (${report.filesSummary.noiseCount}/${report.filesSummary.totalClassified})</span>
+          <span class="summary-pill">Primary files: ${report.filesSummary.primaryCount}</span>
+          ${bucketPills()}
+        </div>
+
+        <div class="stats seven-up">
           <div class="stat-card warn">
             <div class="label">Unused files</div>
             <div class="value">${report.unusedFiles.length}</div>
@@ -264,14 +439,23 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
             <div class="label">Large functions</div>
             <div class="value">${report.largeFunctions.length}</div>
           </div>
+          <div class="stat-card warn">
+            <div class="label">Dead files</div>
+            <div class="value">${report.deadFiles.length}</div>
+          </div>
+          <div class="stat-card error">
+            <div class="label">Dead exports</div>
+            <div class="value">${report.deadClasses.length + report.deadFunctions.length + report.deadConstants.length}</div>
+          </div>
         </div>
 
         <div class="tabs">
-          <button type="button" class="tab active" data-tab="unused-files">Unused (${report.unusedFiles.length})</button>
-          <button type="button" class="tab" data-tab="orphans">Orphans (${report.orphanModules.length})</button>
-          <button type="button" class="tab" data-tab="exports">Exports (${report.unusedExports.length})</button>
-          <button type="button" class="tab" data-tab="large-files">Large files (${report.largeFiles.length})</button>
-          <button type="button" class="tab" data-tab="large-functions">Large fn (${report.largeFunctions.length})</button>
+          ${tabs
+              .map(
+                  (tab, i) =>
+                      `<button type="button" class="tab${i === 0 ? ' active' : ''}" data-tab="${tab.id}">${tab.label} (${tab.count})</button>`,
+              )
+              .join('')}
         </div>
       </div>
 
@@ -290,11 +474,38 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
       <div class="panel" id="panel-large-functions">
         ${renderLargeFunctionRows()}
       </div>
+      <div class="panel" id="panel-files">
+        <div class="filter-row">
+          <label><input type="checkbox" id="show-noise" /> Show noise buckets (${noiseItems.length})</label>
+        </div>
+        <div class="list" id="primary-files-list">${renderDeadFileRows(report.deadFiles, 'No primary dead files.')}</div>
+        <div class="noise-panel" id="noise-files-list">
+          <h3 class="section-title" style="margin:10px 0 6px;font-size:0.8rem">Noise / classified-out</h3>
+          <div class="list">${renderDeadFileRows(noiseItems, 'No noise items.')}</div>
+        </div>
+      </div>
+      <div class="panel" id="panel-classes">
+        <div class="list">${renderDeadRows(report.deadClasses, 'No dead classes found.')}</div>
+      </div>
+      <div class="panel" id="panel-functions">
+        <div class="list">${renderDeadRows(report.deadFunctions, 'No dead functions found.')}</div>
+      </div>
+      <div class="panel" id="panel-constants">
+        <div class="list">${renderDeadRows(report.deadConstants, 'No dead constants found.')}</div>
+      </div>
+      <div class="panel" id="panel-routes">
+        <div class="list">${renderDeadRows(report.deadRoutes, 'No dead routes found.')}</div>
+      </div>
+      <div class="panel" id="panel-apis">
+        <div class="list">${renderDeadRows(report.deadApis, 'No dead APIs found.')}</div>
+      </div>
+      <div class="panel" id="panel-css">
+        <div class="list">${renderDeadRows(report.deadCss, 'No dead CSS classes found.')}</div>
+      </div>
 
       <p class="note">
-        Click rows to open files. Duplicates distinguish <strong>exact</strong> (same text) vs
-        <strong>structural</strong> (same shape, different names/literals). Configure thresholds in
-        <code>kyo-tools.codeAnalyze</code> settings.
+        Click rows to open files. Configure thresholds in
+        <code>kyo-tools.codeAnalyze</code> and <code>kyo-tools.deadCodeExplorer</code> settings.
       </p>
 
       <script>
@@ -330,6 +541,14 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
             }
           });
         });
+
+        const noiseToggle = document.getElementById("show-noise");
+        const noisePanel = document.getElementById("noise-files-list");
+        if (noiseToggle && noisePanel) {
+          noiseToggle.addEventListener("change", () => {
+            noisePanel.classList.toggle("visible", noiseToggle.checked);
+          });
+        }
 
         ${reloadPanelScript()}
       </script>

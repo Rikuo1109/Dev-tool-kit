@@ -1,17 +1,17 @@
-import { getLocalReexportTargets, isIndexBarrelFile } from '../../shared/javascript/barrelFiles';
-import { findReachableFiles, ImportIndex } from '../../shared/javascript/importGraph';
+import { getLocalReexportTargets, isIndexBarrelFile } from '../../../shared/javascript/barrelFiles';
+import { findReachableFiles, ImportIndex } from '../../../shared/javascript/importGraph';
 import { AssetGraph } from './assetGraph';
-import { DeadCodeExplorerConfig } from './config';
 import { extractRequireContextDirs, isUnderAnyDir } from './entryParse';
 import { matchAnyGlob } from './globMatch';
 import {
     DeadBucket,
+    DeadCodeExplorerConfig,
     DeadConfidence,
     DeadItem,
     DeadReason,
     EMPTY_BUCKET_COUNTS,
     FilesSummary,
-} from './types';
+} from '../types';
 
 interface ClassifyFilesInput {
     scopedFiles: string[];

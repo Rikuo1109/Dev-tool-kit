@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { normalizePath } from '../../shared/fs';
+import { normalizePath } from '../../../shared/fs';
 
 const ENTRY_OBJECT_RE = /entry\s*:\s*\{([\s\S]*?)\}/;
 const ENTRY_STRING_RE = /entry\s*:\s*['"]([^'"]+)['"]/;
