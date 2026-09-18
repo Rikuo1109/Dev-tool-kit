@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { normalizePath } from '../fs';
 
-function parsePythonImportModules(content: string): string[] {
+const parsePythonImportModules = (content: string): string[] => {
     const modules = new Set<string>();
 
     for (const line of content.split('\n')) {
@@ -36,13 +36,13 @@ function parsePythonImportModules(content: string): string[] {
     }
 
     return [...modules];
-}
+};
 
-export function resolvePythonModule(
+export const resolvePythonModule = (
     fromFile: string,
     moduleRef: string,
     workspaceRoot: string,
-): string | null {
+): string | null => {
     const fromDir = path.dirname(fromFile);
 
     if (moduleRef.startsWith('.')) {
@@ -51,9 +51,9 @@ export function resolvePythonModule(
 
     const searchRoots = collectPythonSearchRoots(fromFile, workspaceRoot);
     return findPythonModulePath(moduleRef, searchRoots);
-}
+};
 
-function resolveRelativePythonModule(fromDir: string, moduleRef: string): string | null {
+const resolveRelativePythonModule = (fromDir: string, moduleRef: string): string | null => {
     const match = moduleRef.match(/^(\.+)(.*)$/);
     if (!match) {
         return null;
@@ -72,9 +72,9 @@ function resolveRelativePythonModule(fromDir: string, moduleRef: string): string
     }
 
     return findPythonModulePath(rest, [dir]);
-}
+};
 
-function collectPythonSearchRoots(fromFile: string, workspaceRoot: string): string[] {
+const collectPythonSearchRoots = (fromFile: string, workspaceRoot: string): string[] => {
     const roots = new Set<string>();
     const normalizedRoot = normalizePath(workspaceRoot);
 
@@ -90,9 +90,9 @@ function collectPythonSearchRoots(fromFile: string, workspaceRoot: string): stri
     roots.add(normalizedRoot);
     roots.add(path.join(normalizedRoot, 'src'));
     return [...roots];
-}
+};
 
-function findPythonModulePath(moduleRef: string, searchRoots: string[]): string | null {
+const findPythonModulePath = (moduleRef: string, searchRoots: string[]): string | null => {
     const dottedPath = moduleRef.replace(/\./g, '/');
 
     for (const root of searchRoots) {
@@ -108,24 +108,24 @@ function findPythonModulePath(moduleRef: string, searchRoots: string[]): string 
     }
 
     return null;
-}
+};
 
-function findPythonPackageInit(dir: string): string | null {
+const findPythonPackageInit = (dir: string): string | null => {
     const initPath = path.join(dir, '__init__.py');
     if (isFile(initPath)) {
         return normalizePath(initPath);
     }
 
     return null;
-}
+};
 
-function isFile(filePath: string): boolean {
+const isFile = (filePath: string): boolean => {
     try {
         return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
     } catch {
         return false;
     }
-}
+};
 
 export interface PythonImportBinding {
     resolvedPath: string | null;
@@ -134,11 +134,11 @@ export interface PythonImportBinding {
     moduleAlias?: string;
 }
 
-export function parsePythonImportBindings(
+export const parsePythonImportBindings = (
     content: string,
     fromFile: string,
     workspaceRoot: string,
-): PythonImportBinding[] {
+): PythonImportBinding[] => {
     const bindings: PythonImportBinding[] = [];
 
     for (const line of content.split('\n')) {
@@ -183,22 +183,22 @@ export function parsePythonImportBindings(
     }
 
     return bindings;
-}
+};
 
-function parseImportedNames(clause: string): string[] {
+const parseImportedNames = (clause: string): string[] => {
     return clause
         .split(',')
         .map((part) => part.trim())
         .filter(Boolean)
         .map((part) => part.split(/\s+as\s+/)[0]?.trim() ?? '')
         .filter(Boolean);
-}
+};
 
-export function parsePythonImports(
+export const parsePythonImports = (
     content: string,
     fromFile: string,
     workspaceRoot: string,
-): string[] {
+): string[] => {
     const resolved = new Set<string>();
 
     for (const moduleRef of parsePythonImportModules(content)) {
@@ -209,4 +209,4 @@ export function parsePythonImports(
     }
 
     return [...resolved];
-}
+};

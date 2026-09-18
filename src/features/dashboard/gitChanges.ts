@@ -58,31 +58,31 @@ interface GitDailyStats {
 const UNCOMMITTED_FILE_LIMIT = 20;
 const NUMSTAT_FILE_RE = /^(\d+|-)\t(\d+|-)\t(.+)$/;
 
-function emptyLineStats(): LineChangeStats {
+const emptyLineStats = (): LineChangeStats => {
     return { added: 0, deleted: 0, net: 0 };
-}
+};
 
-function toLineStats(added: number, deleted: number): LineChangeStats {
+const toLineStats = (added: number, deleted: number): LineChangeStats => {
     return { added, deleted, net: added - deleted };
-}
+};
 
-function scopeArgs(scope: string): string[] {
+const scopeArgs = (scope: string): string[] => {
     return scope && scope !== '.' ? ['--', scope] : [];
-}
+};
 
-function runGit(gitRoot: string, args: string[]): string {
+const runGit = (gitRoot: string, args: string[]): string => {
     return execFileSync('git', ['-C', gitRoot, ...args], {
         encoding: 'utf-8',
         maxBuffer: 32 * 1024 * 1024,
     });
-}
+};
 
-function mergeNumstatIntoFiles(
+const mergeNumstatIntoFiles = (
     output: string,
     gitRoot: string,
     displayRoot: string,
     into: Map<string, UncommittedFile>,
-): void {
+): void => {
     const normalizedRoot = path.resolve(displayRoot);
 
     for (const rawLine of output.split('\n')) {
@@ -122,13 +122,13 @@ function mergeNumstatIntoFiles(
             });
         }
     }
-}
+};
 
-function getUncommittedChanges(
+const getUncommittedChanges = (
     gitRoot: string,
     scope: string,
     displayRoot: string,
-): { net: number; files: UncommittedFile[] } {
+): { net: number; files: UncommittedFile[] } => {
     const pathArgs = scopeArgs(scope);
     const byFile = new Map<string, UncommittedFile>();
 
@@ -153,9 +153,9 @@ function getUncommittedChanges(
 
     const net = files.reduce((sum, file) => sum + file.net, 0);
     return { net, files };
-}
+};
 
-function rankUncommittedFiles(files: UncommittedFile[]): UncommittedFile[] {
+const rankUncommittedFiles = (files: UncommittedFile[]): UncommittedFile[] => {
     return [...files]
         .sort(
             (a, b) =>
@@ -163,9 +163,12 @@ function rankUncommittedFiles(files: UncommittedFile[]): UncommittedFile[] {
                 a.relativePath.localeCompare(b.relativePath),
         )
         .slice(0, UNCOMMITTED_FILE_LIMIT);
-}
+};
 
-function mergeUncommittedFiles(into: Map<string, UncommittedFile>, from: UncommittedFile[]): void {
+const mergeUncommittedFiles = (
+    into: Map<string, UncommittedFile>,
+    from: UncommittedFile[],
+): void => {
     for (const file of from) {
         const existing = into.get(file.absolutePath);
         if (existing) {
@@ -176,9 +179,9 @@ function mergeUncommittedFiles(into: Map<string, UncommittedFile>, from: Uncommi
             into.set(file.absolutePath, { ...file });
         }
     }
-}
+};
 
-function collectGitDailyStats(folder: string): GitDailyStats {
+const collectGitDailyStats = (folder: string): GitDailyStats => {
     const emptyToday = emptyLineStats();
     const emptyByDate = new Map<string, DailyBucket>();
 
@@ -234,9 +237,9 @@ function collectGitDailyStats(folder: string): GitDailyStats {
             uncommittedFiles: [],
         };
     }
-}
+};
 
-function toChangeStats(daily: GitDailyStats): GitChangeStats {
+const toChangeStats = (daily: GitDailyStats): GitChangeStats => {
     return {
         available: daily.available,
         message: daily.message,
@@ -245,13 +248,13 @@ function toChangeStats(daily: GitDailyStats): GitChangeStats {
         uncommittedNet: daily.uncommittedNet,
         uncommittedFiles: rankUncommittedFiles(daily.uncommittedFiles),
     };
-}
+};
 
-function findSubrepos(folder: string) {
+const findSubrepos = (folder: string) => {
     const result: string[] = [];
     const resolved = path.resolve(folder);
 
-    function walk(dir: string, depth: number) {
+    const walk = (dir: string, depth: number) => {
         if (depth > 3) {
             return;
         }
@@ -281,25 +284,30 @@ function findSubrepos(folder: string) {
 
             walk(fullPath, depth + 1);
         }
-    }
+    };
 
     walk(resolved, 0);
     return result;
-}
+};
 
-function mergeDailyBuckets(into: Map<string, DailyBucket>, from: Map<string, DailyBucket>): void {
+const mergeDailyBuckets = (
+    into: Map<string, DailyBucket>,
+    from: Map<string, DailyBucket>,
+): void => {
     for (const [date, bucket] of from) {
         const merged = into.get(date) ?? { added: 0, deleted: 0 };
         merged.added += bucket.added;
         merged.deleted += bucket.deleted;
         into.set(date, merged);
     }
-}
+};
 
-export function getAggregatedGitChangeStats(folder: string): {
+export const getAggregatedGitChangeStats = (
+    folder: string,
+): {
     stats: GitChangeStats;
     subrepoCount: number;
-} {
+} => {
     const displayRoot = path.resolve(folder);
     const main = collectGitDailyStats(folder);
     const subrepos = findSubrepos(folder);
@@ -352,9 +360,9 @@ export function getAggregatedGitChangeStats(folder: string): {
         },
         subrepoCount: subrepos.length,
     };
-}
+};
 
-function findGitRoot(start: string): string | null {
+const findGitRoot = (start: string): string | null => {
     let dir = path.resolve(start);
 
     while (true) {
@@ -367,9 +375,9 @@ function findGitRoot(start: string): string | null {
         }
         dir = parent;
     }
-}
+};
 
-function parseGitNumstat(output: string): Map<string, DailyBucket> {
+const parseGitNumstat = (output: string): Map<string, DailyBucket> => {
     const byDate = new Map<string, DailyBucket>();
     let currentDate: string | null = null;
 
@@ -406,10 +414,10 @@ function parseGitNumstat(output: string): Map<string, DailyBucket> {
     }
 
     return byDate;
-}
+};
 
 /** Exactly 3 calendar months (oldest→newest), then 7 days. Month totals skip the recent-day window so the same lines aren't counted twice. */
-function buildMixedSeries(byDate: Map<string, DailyBucket>, now = new Date()): GitDayChange[] {
+const buildMixedSeries = (byDate: Map<string, DailyBucket>, now = new Date()): GitDayChange[] => {
     const result: GitDayChange[] = [];
     const cursor = new Date(now);
     cursor.setHours(0, 0, 0, 0);
@@ -465,21 +473,21 @@ function buildMixedSeries(byDate: Map<string, DailyBucket>, now = new Date()): G
     }
 
     return result;
-}
+};
 
-function localDateKey(date = new Date()): string {
+const localDateKey = (date = new Date()): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
-}
+};
 
-function formatShortDate(isoDate: string): string {
+const formatShortDate = (isoDate: string): string => {
     const [, month, day] = isoDate.split('-');
     return `${month}/${day}`;
-}
+};
 
-export function formatGitChartLabels(days: GitDayChange[]): string[] {
+export const formatGitChartLabels = (days: GitDayChange[]): string[] => {
     return days.map((day) => {
         if (day.isMonth) {
             const [year, month] = day.date.split('-');
@@ -487,4 +495,4 @@ export function formatGitChartLabels(days: GitDayChange[]): string[] {
         }
         return formatShortDate(day.date);
     });
-}
+};

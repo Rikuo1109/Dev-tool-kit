@@ -11,11 +11,11 @@ interface ExtractedExport {
     className?: string;
 }
 
-export function findUnusedJavaExports(
+export const findUnusedJavaExports = (
     scopedFiles: string[],
     index: ImportIndex,
     javaTypeIndex: JavaTypeIndex,
-): UnusedExportItem[] {
+): UnusedExportItem[] => {
     const items: UnusedExportItem[] = [];
 
     for (const filePath of scopedFiles) {
@@ -46,15 +46,43 @@ export function findUnusedJavaExports(
     }
 
     return items;
-}
+};
 
-function extractJavaExports(content: string): ExtractedExport[] {
+const extractClassBody = (content: string): string | null => {
+    const classMatch = content.match(
+        /(?:^|\n)\s*public\s+(?:abstract\s+|final\s+)?(?:class|interface|enum|record)\s+\w+[^{]*\{/,
+    );
+    if (!classMatch) {
+        return null;
+    }
+    const startIdx = content.indexOf('{', classMatch.index!);
+    if (startIdx < 0) {
+        return null;
+    }
+    let depth = 0;
+    for (let i = startIdx; i < content.length; i++) {
+        if (content[i] === '{') {
+            depth++;
+        } else if (content[i] === '}') {
+            depth--;
+            if (depth === 0) {
+                return content.slice(startIdx + 1, i);
+            }
+        }
+    }
+    return null;
+};
+
+const extractJavaExports = (content: string): ExtractedExport[] => {
     const exports: ExtractedExport[] = [];
     const seen = new Set<string>();
     const className =
         content.match(
             /(?:^|\n)\s*public\s+(?:abstract\s+|final\s+)?(?:class|interface|enum|record)\s+(\w+)/,
         )?.[1] ?? null;
+
+    const body = className ? extractClassBody(content) : null;
+    const searchArea = body ?? content;
 
     const add = (item: ExtractedExport) => {
         const key = item.className ? `${item.className}.${item.name}` : item.name;
@@ -66,6 +94,7 @@ function extractJavaExports(content: string): ExtractedExport[] {
     };
 
     if (className) {
+        const classBodyOffset = body ? content.indexOf(body) - 1 : 0;
         add({
             name: className,
             kind: 'type',
@@ -75,54 +104,59 @@ function extractJavaExports(content: string): ExtractedExport[] {
             ),
             className,
         });
-    }
 
-    const staticFieldRe =
-        /(?:^|\n)\s*public\s+static\s+(?:final\s+)?[\w<>,\[\].\s?]+\s+(\w+)\s*(?:=|;)/g;
-    let fieldMatch: RegExpExecArray | null;
-    while ((fieldMatch = staticFieldRe.exec(content)) !== null) {
-        if (!className) {
-            continue;
+        const staticFieldRe =
+            /(?:^|\n)\s*public\s+static\s+(?:final\s+)?[\w<>,\[\].\s?]+\s+(\w+)\s*(?:=|;)/g;
+        let fieldMatch: RegExpExecArray | null;
+        while ((fieldMatch = staticFieldRe.exec(searchArea)) !== null) {
+            add({
+                name: fieldMatch[1],
+                kind: 'field',
+                line: lineAt(content, classBodyOffset + fieldMatch.index),
+                className,
+            });
         }
-        add({
-            name: fieldMatch[1],
-            kind: 'field',
-            line: lineAt(content, fieldMatch.index),
-            className,
-        });
-    }
 
-    const staticMethodRe =
-        /(?:^|\n)\s*public\s+static\s+(?:<[^>]+>\s+)?[\w<>,\[\].\s?]+\s+(\w+)\s*\(/g;
-    let methodMatch: RegExpExecArray | null;
-    while ((methodMatch = staticMethodRe.exec(content)) !== null) {
-        if (!className || methodMatch[1] === className) {
-            continue;
+        const staticMethodRe =
+            /(?:^|\n)\s*public\s+static\s+(?:<[^>]+>\s+)?[\w<>,\[\].\s?]+\s+(\w+)\s*\(/g;
+        let methodMatch: RegExpExecArray | null;
+        while ((methodMatch = staticMethodRe.exec(searchArea)) !== null) {
+            if (methodMatch[1] === className) {
+                continue;
+            }
+            add({
+                name: methodMatch[1],
+                kind: 'method',
+                line: lineAt(content, classBodyOffset + methodMatch.index),
+                className,
+            });
         }
-        add({
-            name: methodMatch[1],
-            kind: 'method',
-            line: lineAt(content, methodMatch.index),
-            className,
-        });
     }
 
     return exports;
-}
+};
 
-function collectJavaExportUsage(
+const collectJavaExportUsage = (
     modulePath: string,
     moduleContent: string,
     index: ImportIndex,
     javaTypeIndex: JavaTypeIndex,
-): Set<string> {
+): Set<string> => {
     const used = new Set<string>();
     const className = javaTypeIndex.fileToSimpleName.get(modulePath);
     if (!className) {
         return used;
     }
 
-    for (const filePath of index.files) {
+    const candidateFiles = new Set<string>();
+    for (const importer of index.getImporters(modulePath)) {
+        candidateFiles.add(importer);
+    }
+    for (const dep of findJavaSamePackageDependencies(moduleContent, modulePath, javaTypeIndex)) {
+        candidateFiles.add(dep);
+    }
+
+    for (const filePath of candidateFiles) {
         if (filePath === modulePath) {
             continue;
         }
@@ -159,17 +193,10 @@ function collectJavaExportUsage(
         }
     }
 
-    for (const dep of findJavaSamePackageDependencies(moduleContent, modulePath, javaTypeIndex)) {
-        const depContent = stripJavaCommentsAndStrings(index.getContent(dep));
-        if (className && new RegExp(`\\b${escapeRegExp(className)}\\b`).test(depContent)) {
-            used.add(className);
-        }
-    }
-
     return used;
-}
+};
 
-function resolveStaticImport(specifier: string, javaTypeIndex: JavaTypeIndex): string | null {
+const resolveStaticImport = (specifier: string, javaTypeIndex: JavaTypeIndex): string | null => {
     const direct = javaTypeIndex.classToFile.get(specifier);
     if (direct) {
         return direct;
@@ -181,4 +208,4 @@ function resolveStaticImport(specifier: string, javaTypeIndex: JavaTypeIndex): s
     }
 
     return javaTypeIndex.classToFile.get(specifier.slice(0, lastDot)) ?? null;
-}
+};

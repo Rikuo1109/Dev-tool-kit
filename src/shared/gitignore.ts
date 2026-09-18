@@ -1,7 +1,7 @@
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
-export function findGitRoot(startDir: string): string | null {
+export const findGitRoot = (startDir: string): string | null => {
     try {
         const root = execFileSync('git', ['-C', startDir, 'rev-parse', '--show-toplevel'], {
             encoding: 'utf-8',
@@ -10,13 +10,13 @@ export function findGitRoot(startDir: string): string | null {
     } catch {
         return null;
     }
-}
+};
 
-export function isGitRepository(startDir: string): boolean {
+export const isGitRepository = (startDir: string): boolean => {
     return findGitRoot(startDir) !== null;
-}
+};
 
-export function filterGitIgnoredPaths(gitRoot: string, filePaths: string[]): string[] {
+export const filterGitIgnoredPaths = (gitRoot: string, filePaths: string[]): string[] => {
     if (filePaths.length === 0 || !isGitRepository(gitRoot)) {
         return filePaths;
     }
@@ -42,21 +42,21 @@ export function filterGitIgnoredPaths(gitRoot: string, filePaths: string[]): str
     }
 
     return filePaths.filter((_, index) => !ignoredRel.has(relPaths[index]));
-}
+};
 
-function toGitRelativePath(gitRoot: string, filePath: string): string {
+const toGitRelativePath = (gitRoot: string, filePath: string): string => {
     const trailing = /[/\\]$/.test(filePath);
     const trimmed = trailing ? filePath.replace(/[/\\]+$/, '') : filePath;
     const rel = path.relative(gitRoot, trimmed).replace(/\\/g, '/');
     const base = rel || '.';
     return trailing && base !== '.' ? `${base}/` : base;
-}
+};
 
-function isCheckIgnoreNoMatch(error: unknown): boolean {
+const isCheckIgnoreNoMatch = (error: unknown): boolean => {
     return (
         typeof error === 'object' &&
         error !== null &&
         'status' in error &&
         (error as { status: number }).status === 1
     );
-}
+};

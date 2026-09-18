@@ -24,6 +24,7 @@ export default [
                 },
             ],
 
+            'func-style': ['warn', 'expression', { allowArrowFunctions: true }],
             curly: 'warn',
             eqeqeq: 'warn',
             'no-throw-literal': 'warn',

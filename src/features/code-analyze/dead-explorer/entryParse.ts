@@ -6,14 +6,14 @@ const ENTRY_OBJECT_RE = /entry\s*:\s*\{([\s\S]*?)\}/;
 const ENTRY_STRING_RE = /entry\s*:\s*['"]([^'"]+)['"]/;
 const PATH_RESOLVE_RE = /path\.resolve\s*\(\s*__dirname\s*,\s*['"]([^'"]+)['"]\s*\)/g;
 
-export function parseWebpackLikeEntries(
+export const parseWebpackLikeEntries = (
     content: string,
     configDir: string,
     workspaceRoot: string,
     entries: Set<string>,
     labels: Map<string, string>,
     existsFn: (absPath: string) => boolean = defaultExists,
-): void {
+): void => {
     const objectMatch = ENTRY_OBJECT_RE.exec(content);
     if (objectMatch) {
         const body = objectMatch[1];
@@ -55,14 +55,14 @@ export function parseWebpackLikeEntries(
             }
         }
     }
-}
+};
 
-function resolveFromConfig(
+const resolveFromConfig = (
     configDir: string,
     workspaceRoot: string,
     rel: string,
     existsFn: (absPath: string) => boolean,
-): string | null {
+): string | null => {
     const cleaned = rel.replace(/^\.\//, '');
     return (
         resolveExisting(configDir, cleaned, existsFn) ??
@@ -70,11 +70,11 @@ function resolveFromConfig(
     );
 }
 
-function resolveExisting(
+const resolveExisting = (
     root: string,
     rel: string,
     existsFn: (absPath: string) => boolean,
-): string | null {
+): string | null => {
     const candidates = [
         path.join(root, rel),
         path.join(root, `${rel}.js`),
@@ -91,18 +91,18 @@ function resolveExisting(
         }
     }
     return null;
-}
+};
 
-function defaultExists(absPath: string): boolean {
+const defaultExists = (absPath: string): boolean => {
     try {
         return fs.existsSync(absPath) && fs.statSync(absPath).isFile();
     } catch {
         return false;
     }
-}
+};
 
 /** Collect require.context roots mentioned in source (runtime graph seed dirs). */
-export function extractRequireContextDirs(content: string, fromFile: string): string[] {
+export const extractRequireContextDirs = (content: string, fromFile: string): string[] => {
     const dirs: string[] = [];
     const re = /require\.context\s*\(\s*['"]([^'"]+)['"]/g;
     let match: RegExpExecArray | null;
@@ -111,9 +111,9 @@ export function extractRequireContextDirs(content: string, fromFile: string): st
         dirs.push(abs);
     }
     return dirs;
-}
+};
 
-export function isUnderAnyDir(filePath: string, dirs: string[]): boolean {
+export const isUnderAnyDir = (filePath: string, dirs: string[]): boolean => {
     const norm = normalizePath(filePath);
     return dirs.some((dir) => norm === dir || norm.startsWith(dir.endsWith('/') ? dir : `${dir}/`));
-}
+};

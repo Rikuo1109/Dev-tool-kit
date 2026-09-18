@@ -17,7 +17,7 @@ interface GraphTheme extends PanelTheme {
     dependentSoft: string;
 }
 
-function getGraphTheme(isDark: boolean): GraphTheme {
+const getGraphTheme = (isDark: boolean): GraphTheme => {
     const base = getPanelTheme(isDark);
     return isDark
         ? {
@@ -34,9 +34,9 @@ function getGraphTheme(isDark: boolean): GraphTheme {
               dependent: '#16a34a',
               dependentSoft: 'rgba(22, 163, 74, 0.12)',
           };
-}
+};
 
-function graphStyles(t: GraphTheme): string {
+const graphStyles = (t: GraphTheme): string => {
     return `
     ${panelCompactToolbarStyles(t)}
     ${panelToolbarBtnStyles(t)}
@@ -126,13 +126,13 @@ function graphStyles(t: GraphTheme): string {
       min-height: 0;
     }
   `;
-}
+};
 
-export function getCodeGraphLoadingHtml(
+export const getCodeGraphLoadingHtml = (
     relativePath: string,
     isDark: boolean,
     status = 'Analyzing imports…',
-): string {
+): string => {
     const t = getGraphTheme(isDark);
 
     return panelDocument({
@@ -169,9 +169,9 @@ export function getCodeGraphLoadingHtml(
   </script>
     `,
     });
-}
+};
 
-export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
+export const getCodeGraphHtml = (data: CodeGraphData, isDark: boolean): string => {
     const t = getGraphTheme(isDark);
 
     const legend = `
@@ -581,4 +581,4 @@ export function getCodeGraphHtml(data: CodeGraphData, isDark: boolean): string {
   </script>
     `,
     });
-}
+};

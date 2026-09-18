@@ -123,7 +123,7 @@ export interface TemplateFile {
     label: string;
 }
 
-export function getTemplateFiles(): TemplateFile[] {
+export const getTemplateFiles = (): TemplateFile[] => {
     return [
         {
             relativePath: '.cursor/rules/caveman-lite.mdc',
@@ -146,4 +146,4 @@ export function getTemplateFiles(): TemplateFile[] {
             label: 'AI template manifest',
         },
     ];
-}
+};

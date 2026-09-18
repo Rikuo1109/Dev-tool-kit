@@ -1,23 +1,19 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { EXCLUDE_GLOB, SOURCE_GLOB } from '../../shared/constants';
 import { normalizePath, toRelativePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
-import {
-    loadTsConfigForFile,
-    parseImports,
-    resolveImport,
-} from '../../shared/javascript/importGraph';
+import { ImportIndex } from '../../shared/javascript/importGraph';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { getCodeGraphHtml, getCodeGraphLoadingHtml } from './panel';
 import { CodeGraphData, GraphEdge, GraphExpansion, GraphNode } from './types';
+import { getCachedImportIndex } from '../../shared/importIndexCache';
 
 export type { CodeGraphData, GraphExpansion } from './types';
 
-async function buildCodeGraph(
+const buildCodeGraph = async (
     fileUri: vscode.Uri,
     onProgress?: (message: string) => void,
-): Promise<CodeGraphData> {
+): Promise<CodeGraphData> => {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
     if (!workspaceFolder) {
         throw new Error('File is not inside a workspace folder');
@@ -25,20 +21,20 @@ async function buildCodeGraph(
 
     const workspaceRoot = workspaceFolder.uri.fsPath;
     const normalizedTarget = normalizePath(fileUri.fsPath);
-    const tsConfig = loadTsConfigForFile(fileUri.fsPath, workspaceRoot);
 
     onProgress?.('Analyzing imports…');
 
-    const dependencies = await collectDependencies(normalizedTarget, workspaceRoot, tsConfig);
+    const index = await getOrBuildIndex(workspaceFolder);
+    const dependencies = collectDependencies(normalizedTarget, workspaceRoot, index);
 
     onProgress?.('Finding dependents…');
 
-    const dependents = await findDependents(fileUri, normalizedTarget, workspaceRoot, tsConfig);
+    const dependents = findDependents(normalizedTarget, workspaceRoot, index);
 
     return toGraphData(normalizedTarget, workspaceRoot, dependencies, dependents);
-}
+};
 
-async function expandGraphNode(fileUri: vscode.Uri, nodePath: string): Promise<GraphExpansion> {
+const expandGraphNode = async (fileUri: vscode.Uri, nodePath: string): Promise<GraphExpansion> => {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
     if (!workspaceFolder) {
         throw new Error('File is not inside a workspace folder');
@@ -51,10 +47,9 @@ async function expandGraphNode(fileUri: vscode.Uri, nodePath: string): Promise<G
         return { centerPath: normalizedCenter, nodes: [], edges: [] };
     }
 
-    const centerUri = vscode.Uri.file(normalizedCenter);
-    const tsConfig = loadTsConfigForFile(normalizedCenter, workspaceRoot);
-    const dependencies = await collectDependencies(normalizedCenter, workspaceRoot, tsConfig);
-    const dependents = await findDependents(centerUri, normalizedCenter, workspaceRoot, tsConfig);
+    const index = await getOrBuildIndex(workspaceFolder);
+    const dependencies = collectDependencies(normalizedCenter, workspaceRoot, index);
+    const dependents = findDependents(normalizedCenter, workspaceRoot, index);
 
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
@@ -73,209 +68,73 @@ async function expandGraphNode(fileUri: vscode.Uri, nodePath: string): Promise<G
     }
 
     return { centerPath: normalizedCenter, nodes, edges };
-}
+};
 
-async function collectDependencies(
+const getOrBuildIndex = async (workspaceFolder: vscode.WorkspaceFolder): Promise<ImportIndex> => {
+    const cached = getCachedImportIndex(workspaceFolder.uri.fsPath);
+    if (cached) {
+        return cached;
+    }
+    const { buildImportIndex } = await import('../../shared/javascript/importGraph.js');
+    const { getAnalyzeConfig, getDeadCodeExplorerConfig } =
+        await import('../code-analyze/deadCode.js');
+    const config = getAnalyzeConfig();
+    const explorerConfig = getDeadCodeExplorerConfig();
+    const entryGlobs = [...config.entryGlobs, ...explorerConfig.entryGlobs];
+    return buildImportIndex(workspaceFolder, entryGlobs, config.excludeGlobs);
+};
+
+const collectDependencies = (
     filePath: string,
     workspaceRoot: string,
-    tsConfig: ReturnType<typeof loadTsConfigForFile>,
-): Promise<Map<string, string>> {
+    index: ImportIndex,
+): Map<string, string> => {
     const normalizedTarget = normalizePath(filePath);
     const dependencies = new Map<string, string>();
-    const targetImports = parseImports(await readText(vscode.Uri.file(filePath)), filePath);
 
-    for (const specifier of targetImports) {
-        const resolved = resolveImport(filePath, specifier, workspaceRoot, tsConfig);
-        if (resolved?.type !== 'internal') {
+    for (const imp of index.getImports(filePath)) {
+        if (!imp.resolvedPath) {
             continue;
         }
-        if (resolved.fsPath !== normalizedTarget && isInSrcFolder(resolved.fsPath, workspaceRoot)) {
-            dependencies.set(resolved.fsPath, toRelativePath(resolved.fsPath, workspaceRoot));
+        if (
+            imp.resolvedPath !== normalizedTarget &&
+            isInSrcFolder(imp.resolvedPath, workspaceRoot)
+        ) {
+            dependencies.set(imp.resolvedPath, toRelativePath(imp.resolvedPath, workspaceRoot));
         }
     }
 
     return dependencies;
-}
+};
 
-async function findDependents(
-    fileUri: vscode.Uri,
+const findDependents = (
     normalizedTarget: string,
     workspaceRoot: string,
-    tsConfig: ReturnType<typeof loadTsConfigForFile>,
-): Promise<Map<string, string>> {
+    index: ImportIndex,
+): Map<string, string> => {
     const dependents = new Map<string, string>();
 
-    const refDependents = await findDependentsViaReferences(
-        fileUri,
-        normalizedTarget,
-        workspaceRoot,
-    );
-    for (const [filePath, rel] of refDependents) {
-        if (isInSrcFolder(filePath, workspaceRoot)) {
-            dependents.set(filePath, rel);
-        }
-    }
-
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-    if (!workspaceFolder) {
-        return dependents;
-    }
-
-    const allFiles = await vscode.workspace.findFiles(
-        new vscode.RelativePattern(workspaceFolder, SOURCE_GLOB),
-        EXCLUDE_GLOB,
-    );
-
-    for (const candidate of allFiles) {
-        const candidatePath = normalizePath(candidate.fsPath);
-        if (candidatePath === normalizedTarget || dependents.has(candidatePath)) {
-            continue;
-        }
-
-        const imports = parseImports(await readText(candidate), candidate.fsPath);
-        for (const specifier of imports) {
-            const resolved = resolveImport(candidate.fsPath, specifier, workspaceRoot, tsConfig);
-            if (
-                resolved?.type === 'internal' &&
-                resolved.fsPath === normalizedTarget &&
-                isInSrcFolder(candidatePath, workspaceRoot)
-            ) {
-                dependents.set(candidatePath, toRelativePath(candidatePath, workspaceRoot));
-                break;
-            }
+    for (const importerPath of index.getImporters(normalizedTarget)) {
+        const importerNorm = normalizePath(importerPath);
+        if (importerNorm !== normalizedTarget && isInSrcFolder(importerNorm, workspaceRoot)) {
+            dependents.set(importerNorm, toRelativePath(importerNorm, workspaceRoot));
         }
     }
 
     return dependents;
-}
+};
 
-async function findDependentsViaReferences(
-    fileUri: vscode.Uri,
-    normalizedTarget: string,
-    workspaceRoot: string,
-): Promise<Map<string, string>> {
-    const dependents = new Map<string, string>();
-    const document = await vscode.workspace.openTextDocument(fileUri);
-    const anchorPositions = await getReferenceAnchorPositions(document);
-
-    for (const position of anchorPositions) {
-        const references = await vscode.commands.executeCommand<vscode.Location[]>(
-            'vscode.executeReferenceProvider',
-            fileUri,
-            position,
-        );
-
-        if (!references?.length) {
-            continue;
-        }
-
-        for (const reference of references) {
-            if (reference.uri.scheme !== 'file') {
-                continue;
-            }
-
-            const refPath = normalizePath(reference.uri.fsPath);
-            if (refPath === normalizedTarget) {
-                continue;
-            }
-
-            if (!refPath.startsWith(normalizePath(workspaceRoot))) {
-                continue;
-            }
-
-            if (!isInSrcFolder(refPath, workspaceRoot)) {
-                continue;
-            }
-
-            dependents.set(refPath, toRelativePath(refPath, workspaceRoot));
-        }
-    }
-
-    return dependents;
-}
-
-async function getReferenceAnchorPositions(
-    document: vscode.TextDocument,
-): Promise<vscode.Position[]> {
-    const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-        'vscode.executeDocumentSymbolProvider',
-        document.uri,
-    );
-
-    const positions: vscode.Position[] = [];
-
-    if (symbols?.length) {
-        collectSymbolPositions(symbols, positions);
-    }
-
-    if (!positions.length) {
-        positions.push(...findExportPositions(document.getText(), document));
-    }
-
-    return positions;
-}
-
-function collectSymbolPositions(
-    symbols: vscode.DocumentSymbol[],
-    positions: vscode.Position[],
-): void {
-    for (const symbol of symbols) {
-        if (isExportLikeSymbol(symbol.kind) && positions.length < 8) {
-            positions.push(symbol.selectionRange.start);
-        }
-
-        if (symbol.children.length > 0) {
-            collectSymbolPositions(symbol.children, positions);
-        }
-    }
-}
-
-function findExportPositions(content: string, document: vscode.TextDocument): vscode.Position[] {
-    const positions: vscode.Position[] = [];
-    const patterns = [
-        /export\s+default\s+(?:async\s+)?function\s+\w+/g,
-        /export\s+(?:async\s+)?function\s+\w+/g,
-        /export\s+(?:default\s+)?(?:const|let|var|class)\s+\w+/g,
-    ];
-
-    for (const pattern of patterns) {
-        pattern.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = pattern.exec(content)) !== null) {
-            positions.push(document.positionAt(match.index));
-            if (positions.length >= 8) {
-                return positions;
-            }
-        }
-    }
-
-    return positions.length ? positions : [document.positionAt(0)];
-}
-
-function isExportLikeSymbol(kind: vscode.SymbolKind): boolean {
-    return (
-        kind === vscode.SymbolKind.Function ||
-        kind === vscode.SymbolKind.Class ||
-        kind === vscode.SymbolKind.Variable ||
-        kind === vscode.SymbolKind.Constant ||
-        kind === vscode.SymbolKind.Interface ||
-        kind === vscode.SymbolKind.Enum ||
-        kind === vscode.SymbolKind.Module ||
-        kind === vscode.SymbolKind.Method
-    );
-}
-
-function isInSrcFolder(absolutePath: string, workspaceRoot: string): boolean {
+const isInSrcFolder = (absolutePath: string, workspaceRoot: string): boolean => {
     const relative = toRelativePath(normalizePath(absolutePath), workspaceRoot).replace(/\\/g, '/');
     return relative === 'src' || relative.startsWith('src/');
-}
+};
 
-function toGraphData(
+const toGraphData = (
     targetPath: string,
     workspaceRoot: string,
     dependencies: Map<string, string>,
     dependents: Map<string, string>,
-): CodeGraphData {
+): CodeGraphData => {
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
     const nodeIds = new Set<string>();
@@ -312,14 +171,14 @@ function toGraphData(
             dependents: dependents.size,
         },
     };
-}
+};
 
-async function readText(uri: vscode.Uri): Promise<string> {
+const readText = async (uri: vscode.Uri): Promise<string> => {
     const doc = await vscode.workspace.openTextDocument(uri);
     return doc.getText();
-}
+};
 
-function languageFromPath(filePath: string): string {
+const languageFromPath = (filePath: string): string => {
     const ext = path.extname(filePath).toLowerCase();
     const byExt: Record<string, string> = {
         '.ts': 'typescript',
@@ -341,9 +200,9 @@ function languageFromPath(filePath: string): string {
         '.sh': 'bash',
     };
     return byExt[ext] ?? '';
-}
+};
 
-async function formatFilesForAi(filePaths: string[], workspaceRoot: string): Promise<string> {
+const formatFilesForAi = async (filePaths: string[], workspaceRoot: string): Promise<string> => {
     const blocks: string[] = [];
 
     for (const filePath of filePaths) {
@@ -359,9 +218,9 @@ async function formatFilesForAi(filePaths: string[], workspaceRoot: string): Pro
     }
 
     return blocks.join('\n\n');
-}
+};
 
-export async function openCodeGraph(fileUri: vscode.Uri): Promise<void> {
+export const openCodeGraph = async (fileUri: vscode.Uri): Promise<void> => {
     const fileName = path.basename(fileUri.fsPath);
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
     const relativePath = workspaceFolder
@@ -459,4 +318,4 @@ export async function openCodeGraph(fileUri: vscode.Uri): Promise<void> {
     });
 
     await render();
-}
+};

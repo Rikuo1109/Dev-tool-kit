@@ -13,10 +13,10 @@ export interface JavaTypeIndex {
     fileToSimpleName: Map<string, string>;
 }
 
-export function buildJavaTypeIndex(
+export const buildJavaTypeIndex = (
     javaFiles: string[],
     readContent: (filePath: string) => string,
-): JavaTypeIndex {
+): JavaTypeIndex => {
     const classToFile = new Map<string, string>();
     const packageToFiles = new Map<string, Set<string>>();
     const fileToPackage = new Map<string, string>();
@@ -48,9 +48,9 @@ export function buildJavaTypeIndex(
         fileToPackage,
         fileToSimpleName,
     };
-}
+};
 
-function getJavaTopLevelTypeName(content: string, filePath: string) {
+const getJavaTopLevelTypeName = (content: string, filePath: string) => {
     const packageName = content.match(PACKAGE_RE)?.[1];
     const typeName = content.match(TOP_LEVEL_TYPE_RE)?.[1] ?? getFallbackJavaTypeName(filePath);
 
@@ -59,19 +59,19 @@ function getJavaTopLevelTypeName(content: string, filePath: string) {
     }
 
     return packageName ? `${packageName}.${typeName}` : typeName;
-}
+};
 
-function getFallbackJavaTypeName(filePath: string): string | null {
+const getFallbackJavaTypeName = (filePath: string): string | null => {
     const match = filePath.match(/\/([^/]+)\.java$/i);
     return match?.[1] ?? null;
-}
+};
 
 interface JavaImportRef {
     kind: 'type' | 'wildcard';
     value: string;
 }
 
-function parseJavaImportRefs(content: string): JavaImportRef[] {
+const parseJavaImportRefs = (content: string): JavaImportRef[] => {
     const refs: JavaImportRef[] = [];
 
     IMPORT_RE.lastIndex = 0;
@@ -89,9 +89,9 @@ function parseJavaImportRefs(content: string): JavaImportRef[] {
     }
 
     return refs;
-}
+};
 
-function resolveJavaImport(specifier: string, index: JavaTypeIndex) {
+const resolveJavaImport = (specifier: string, index: JavaTypeIndex) => {
     const direct = index.classToFile.get(specifier);
     if (direct) {
         return direct;
@@ -103,18 +103,18 @@ function resolveJavaImport(specifier: string, index: JavaTypeIndex) {
     }
 
     return index.classToFile.get(specifier.slice(0, lastDot)) ?? null;
-}
+};
 
-function resolveJavaWildcardImport(packageName: string, index: JavaTypeIndex): string[] {
+const resolveJavaWildcardImport = (packageName: string, index: JavaTypeIndex): string[] => {
     const files = index.packageToFiles.get(packageName);
     return files ? [...files] : [];
-}
+};
 
-export function findJavaSamePackageDependencies(
+export const findJavaSamePackageDependencies = (
     content: string,
     fromFile: string,
     index: JavaTypeIndex,
-): string[] {
+): string[] => {
     const packageName = index.fileToPackage.get(fromFile);
     if (packageName === undefined) {
         return [];
@@ -146,13 +146,13 @@ export function findJavaSamePackageDependencies(
     }
 
     return [...deps];
-}
+};
 
-export function parseJavaImports(
+export const parseJavaImports = (
     content: string,
     fromFile: string,
     index: JavaTypeIndex,
-): string[] {
+): string[] => {
     const resolved = new Set<string>();
 
     for (const ref of parseJavaImportRefs(content)) {
@@ -174,4 +174,4 @@ export function parseJavaImports(
     }
 
     return [...resolved];
-}
+};

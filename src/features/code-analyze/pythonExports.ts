@@ -10,10 +10,7 @@ interface ExtractedExport {
     line?: number;
 }
 
-export function findUnusedPythonExports(
-    scopedFiles: string[],
-    index: ImportIndex,
-): UnusedExportItem[] {
+export const findUnusedPythonExports = (scopedFiles: string[], index: ImportIndex) => {
     const items: UnusedExportItem[] = [];
 
     for (const filePath of scopedFiles) {
@@ -46,9 +43,9 @@ export function findUnusedPythonExports(
     }
 
     return items;
-}
+};
 
-function extractPythonExports(content: string): ExtractedExport[] {
+const extractPythonExports = (content: string): ExtractedExport[] => {
     const explicitAll = parseAllList(content);
     if (explicitAll.length > 0) {
         return explicitAll.map((name) => ({
@@ -68,38 +65,45 @@ function extractPythonExports(content: string): ExtractedExport[] {
         exports.push({ name, kind, line });
     };
 
+    let offset = 0;
     for (const line of content.split('\n')) {
         if (/^\s/.test(line)) {
+            offset += line.length + 1;
             continue;
         }
 
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) {
+            offset += line.length + 1;
             continue;
         }
 
         const defMatch = trimmed.match(/^(?:async\s+)?def\s+(\w+)\s*\(/);
         if (defMatch) {
-            add(defMatch[1], 'function', lineAt(content, content.indexOf(line)));
+            add(defMatch[1], 'function', lineAt(content, offset));
+            offset += line.length + 1;
             continue;
         }
 
         const classMatch = trimmed.match(/^class\s+(\w+)/);
         if (classMatch) {
-            add(classMatch[1], 'class', lineAt(content, content.indexOf(line)));
+            add(classMatch[1], 'class', lineAt(content, offset));
+            offset += line.length + 1;
             continue;
         }
 
         const constMatch = trimmed.match(/^([A-Z][A-Z0-9_]*)\s*=/);
         if (constMatch) {
-            add(constMatch[1], 'constant', lineAt(content, content.indexOf(line)));
+            add(constMatch[1], 'constant', lineAt(content, offset));
         }
+
+        offset += line.length + 1;
     }
 
     return exports;
-}
+};
 
-function parseAllList(content: string): string[] {
+const parseAllList = (content: string): string[] => {
     const match = content.match(/__all__\s*=\s*(?:\[([^\]]+)\]|\(([^)]+)\))/);
     if (!match) {
         return [];
@@ -110,9 +114,9 @@ function parseAllList(content: string): string[] {
         .split(',')
         .map((part) => part.trim().replace(/^['"]|['"]$/g, ''))
         .filter(Boolean);
-}
+};
 
-function collectPythonExportUsage(modulePath: string, index: ImportIndex): Set<string> {
+const collectPythonExportUsage = (modulePath: string, index: ImportIndex): Set<string> => {
     const used = new Set<string>();
 
     for (const filePath of index.files) {
@@ -150,9 +154,9 @@ function collectPythonExportUsage(modulePath: string, index: ImportIndex): Set<s
     }
 
     return used;
-}
+};
 
-function extractModuleAttributeUsage(content: string, moduleAlias: string): string[] {
+const extractModuleAttributeUsage = (content: string, moduleAlias: string): string[] => {
     const names = new Set<string>();
     const re = new RegExp(`\\b${escapeRegExp(moduleAlias)}\\.(\\w+)\\b`, 'g');
     let match: RegExpExecArray | null;
@@ -160,4 +164,4 @@ function extractModuleAttributeUsage(content: string, moduleAlias: string): stri
         names.add(match[1]);
     }
     return [...names];
-}
+};

@@ -10,6 +10,8 @@ import { getSourceLanguage } from '../language';
 import { discoverPythonEntryPoints } from '../python/entryPoints';
 import { parsePythonImports } from '../python/graph';
 import { extractVueScript } from '../code-parser';
+import { isReexportOnlyBarrel } from './barrelFiles';
+import { getCachedImportIndex, setCachedImportIndex } from '../importIndexCache';
 
 const RESOLVE_EXTENSIONS = [
     '',
@@ -64,14 +66,19 @@ export interface ImportIndex {
 
 export type ResolvedImport =
     | { type: 'internal'; fsPath: string }
-    | { type: 'external'; name: string };
+    | { type: 'external'; name: string }
+    | { type: 'unresolved'; specifier: string };
 
-export async function buildImportIndex(
+export const buildImportIndex = async (
     workspaceFolder: vscode.WorkspaceFolder,
     entryGlobs: string[],
     excludeGlobs: string[],
-): Promise<ImportIndex> {
+): Promise<ImportIndex> => {
     const workspaceRoot = workspaceFolder.uri.fsPath;
+    const cached = getCachedImportIndex(workspaceRoot);
+    if (cached) {
+        return cached;
+    }
     const uris = await vscode.workspace.findFiles(
         new vscode.RelativePattern(workspaceFolder, ANALYZE_SOURCE_GLOB),
         EXCLUDE_GLOB,
@@ -123,6 +130,12 @@ export async function buildImportIndex(
         }
     }
 
+    for (const entry of [...entryPoints]) {
+        if (isReexportOnlyBarrel(getContent(entry), entry)) {
+            entryPoints.delete(entry);
+        }
+    }
+
     const tsConfigCache = new Map<string, TsConfigContext>();
     const dependencies = new Map<string, Set<string>>();
     const importers = new Map<string, Set<string>>();
@@ -144,7 +157,13 @@ export async function buildImportIndex(
         if (!resolved) {
             return null;
         }
-        return resolved.type === 'internal' ? resolved.fsPath : 'external';
+        if (resolved.type === 'internal') {
+            return resolved.fsPath;
+        }
+        if (resolved.type === 'external') {
+            return 'external';
+        }
+        return null;
     };
 
     for (const filePath of files) {
@@ -170,7 +189,7 @@ export async function buildImportIndex(
         dependencies.set(filePath, deps);
     }
 
-    return {
+    const result: ImportIndex = {
         workspaceRoot,
         files,
         entryPoints,
@@ -182,9 +201,13 @@ export async function buildImportIndex(
         resolve,
         javaTypeIndex,
     };
-}
 
-export function findReachableFiles(index: ImportIndex, seeds: Set<string>): Set<string> {
+    setCachedImportIndex(workspaceRoot, result);
+
+    return result;
+};
+
+export const findReachableFiles = (index: ImportIndex, seeds: Set<string>): Set<string> => {
     const reachable = new Set<string>();
     const queue = [...seeds];
 
@@ -202,13 +225,13 @@ export function findReachableFiles(index: ImportIndex, seeds: Set<string>): Set<
     }
 
     return reachable;
-}
+};
 
-async function findEntryPoints(
+const findEntryPoints = async (
     workspaceFolder: vscode.WorkspaceFolder,
     workspaceRoot: string,
     entryGlobs: string[],
-): Promise<Set<string>> {
+): Promise<Set<string>> => {
     const entries = new Set<string>();
 
     for (const pattern of entryGlobs) {
@@ -244,15 +267,15 @@ async function findEntryPoints(
 
     const gitRoot = findGitRoot(workspaceRoot) ?? workspaceRoot;
     return new Set(filterGitIgnoredPaths(gitRoot, [...entries]));
-}
+};
 
-function parseDetailedImports(
+const parseDetailedImports = (
     content: string,
     filePath: string,
     resolveFn: (specifier: string) => string | 'external' | null,
     workspaceRoot: string,
     javaTypeIndex: JavaTypeIndex,
-): ParsedImport[] {
+): ParsedImport[] => {
     const language = getSourceLanguage(filePath);
 
     if (language === 'python') {
@@ -326,13 +349,15 @@ function parseDetailedImports(
     }
 
     return results;
-}
+};
 
-function parseImportClause(clause: string): {
+const parseImportClause = (
+    clause: string,
+): {
     named: Set<string>;
     defaultImport: boolean;
     namespace: boolean;
-} {
+} => {
     const named = new Set<string>();
     let defaultImport = false;
     let namespace = false;
@@ -364,50 +389,70 @@ function parseImportClause(clause: string): {
     }
 
     return { named, defaultImport, namespace };
-}
+};
 
-function parseImports(content: string, filePath: string): string[] {
-    const specifiers = new Set<string>();
-    const source = filePath.endsWith('.vue') ? extractVueScript(content) : content;
+const NODE_BUILTINS = new Set([
+    'assert',
+    'buffer',
+    'child_process',
+    'cluster',
+    'console',
+    'constants',
+    'crypto',
+    'dgram',
+    'dns',
+    'domain',
+    'events',
+    'fs',
+    'http',
+    'https',
+    'module',
+    'net',
+    'os',
+    'path',
+    'process',
+    'punycode',
+    'querystring',
+    'readline',
+    'repl',
+    'stream',
+    'string_decoder',
+    'sys',
+    'timers',
+    'tls',
+    'tty',
+    'url',
+    'util',
+    'v8',
+    'vm',
+    'worker_threads',
+    'zlib',
+]);
 
-    for (const regex of [
-        /(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g,
-        REQUIRE_RE,
-        DYNAMIC_IMPORT_RE,
-        SIDE_EFFECT_IMPORT_RE,
-    ]) {
-        regex.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = regex.exec(source)) !== null) {
-            specifiers.add(match[1]);
-        }
-    }
+const isNodeBuiltin = (specifier: string): boolean => {
+    const base = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
+    return NODE_BUILTINS.has(base);
+};
 
-    return [...specifiers];
-}
-
-export function resolveImport(
+export const resolveImport = (
     fromFile: string,
     specifier: string,
     workspaceRoot: string,
     tsConfig: TsConfigContext,
-): ResolvedImport | null {
+): ResolvedImport | null => {
     if (specifier.startsWith('.')) {
         const resolved = resolveFilePath(path.dirname(fromFile), specifier);
-        return resolved ? { type: 'internal', fsPath: resolved } : null;
+        return resolved
+            ? { type: 'internal', fsPath: resolved }
+            : { type: 'unresolved', specifier };
     }
 
-    if (!specifier.startsWith('.')) {
-        const exactTargets = tsConfig.exactAliases.get(specifier);
-        if (exactTargets) {
-            for (const targetPattern of exactTargets) {
-                const resolved = resolveFilePath(
-                    tsConfig.baseUrl,
-                    targetPattern.replace(/^\.\//, ''),
-                );
-                if (resolved) {
-                    return { type: 'internal', fsPath: resolved };
-                }
+    const exactTargets = tsConfig.exactAliases.get(specifier);
+    if (exactTargets) {
+        for (const targetPattern of exactTargets) {
+            const resolved = resolveFilePath(tsConfig.baseUrl, targetPattern.replace(/^\.\//, ''));
+            if (resolved) {
+                return { type: 'internal', fsPath: resolved };
             }
         }
     }
@@ -438,19 +483,19 @@ export function resolveImport(
         return { type: 'internal', fsPath: fromSrc };
     }
 
-    if (!specifier.startsWith('.')) {
-        return {
-            type: 'external',
-            name: specifier.startsWith('@')
-                ? specifier.split('/').slice(0, 2).join('/')
-                : specifier.split('/')[0],
-        };
+    if (isNodeBuiltin(specifier)) {
+        return { type: 'external', name: specifier };
     }
 
-    return null;
-}
+    return {
+        type: 'external',
+        name: specifier.startsWith('@')
+            ? specifier.split('/').slice(0, 2).join('/')
+            : specifier.split('/')[0],
+    };
+};
 
-function resolveFilePath(fromDir: string, specifier: string): string | null {
+const resolveFilePath = (fromDir: string, specifier: string): string | null => {
     const base = path.resolve(fromDir, specifier);
     for (const ext of RESOLVE_EXTENSIONS) {
         const candidate = normalizePath(base + ext);
@@ -463,9 +508,9 @@ function resolveFilePath(fromDir: string, specifier: string): string | null {
         }
     }
     return null;
-}
+};
 
-export function loadTsConfigForFile(filePath: string, workspaceRoot: string): TsConfigContext {
+export const loadTsConfigForFile = (filePath: string, workspaceRoot: string): TsConfigContext => {
     const configPath = findNearestTsConfig(filePath, workspaceRoot);
     if (!configPath) {
         return {
@@ -511,9 +556,9 @@ export function loadTsConfigForFile(filePath: string, workspaceRoot: string): Ts
             exactAliases: new Map(),
         };
     }
-}
+};
 
-function findNearestTsConfig(filePath: string, workspaceRoot: string): string | null {
+const findNearestTsConfig = (filePath: string, workspaceRoot: string): string | null => {
     const configNames = ['tsconfig.json', 'jsconfig.json', 'tsconfig.app.json'];
     let dir = path.dirname(filePath);
     const root = path.resolve(workspaceRoot);
@@ -539,6 +584,4 @@ function findNearestTsConfig(filePath: string, workspaceRoot: string): string | 
     }
 
     return null;
-}
-
-export { parseImports };
+};

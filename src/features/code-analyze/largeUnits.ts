@@ -7,11 +7,11 @@ import {
 } from '../../shared/code-parser';
 import { CodeAnalyzeConfig, LargeFileItem, LargeFunctionItem } from './types';
 
-export function findLargeFiles(
+export const findLargeFiles = (
     scopedFiles: string[],
     index: ImportIndex,
     config: CodeAnalyzeConfig,
-): LargeFileItem[] {
+): LargeFileItem[] => {
     const items: LargeFileItem[] = [];
 
     for (const filePath of scopedFiles) {
@@ -31,13 +31,13 @@ export function findLargeFiles(
     }
 
     return items.sort((a, b) => b.loc - a.loc);
-}
+};
 
-export function findLargeFunctions(
+export const findLargeFunctions = (
     scopedFiles: string[],
     index: ImportIndex,
     config: CodeAnalyzeConfig,
-): LargeFunctionItem[] {
+): LargeFunctionItem[] => {
     const items: LargeFunctionItem[] = [];
 
     for (const filePath of scopedFiles) {
@@ -70,9 +70,9 @@ export function findLargeFunctions(
     }
 
     return items.sort((a, b) => b.loc - a.loc || b.paramCount - a.paramCount);
-}
+};
 
-function extractFunctionName(snippet: string): string | undefined {
+const extractFunctionName = (snippet: string): string | undefined => {
     const patterns = [
         /export\s+(?:async\s+)?function\s+(\w+)/,
         /(?:async\s+)?function\s+(\w+)/,
@@ -96,9 +96,9 @@ function extractFunctionName(snippet: string): string | undefined {
     }
 
     return undefined;
-}
+};
 
-function countParams(signature: string): number {
+const countParams = (signature: string): number => {
     const match = signature.match(/\(([^)]*)\)/) ?? signature.match(/def\s+\w+\s*\(([^)]*)\)/);
     if (!match) {
         return 0;
@@ -107,13 +107,13 @@ function countParams(signature: string): number {
         .split(',')
         .map((part) => part.trim())
         .filter(Boolean).length;
-}
+};
 
-function buildFunctionSuggestion(
+const buildFunctionSuggestion = (
     loc: number,
     paramCount: number,
     config: CodeAnalyzeConfig,
-): string {
+): string => {
     const parts: string[] = [];
     if (loc > config.largeFunctionLoc) {
         parts.push(
@@ -124,4 +124,4 @@ function buildFunctionSuggestion(
         parts.push(`Reduce parameters (${paramCount}) — group into an options object`);
     }
     return `${parts.join('. ')}.`;
-}
+};

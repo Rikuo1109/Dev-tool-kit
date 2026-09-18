@@ -15,7 +15,7 @@ interface CommandDefinition {
     handler: (uri?: vscode.Uri) => Promise<void>;
 }
 
-async function resolveFileUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
+const resolveFileUri = async (uri?: vscode.Uri): Promise<vscode.Uri | undefined> => {
     if (uri) {
         return uri;
     }
@@ -30,7 +30,7 @@ async function resolveFileUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined>
         'Open a workspace file in the editor, or right-click a file in Explorer and choose Code Graph.',
     );
     return undefined;
-}
+};
 
 const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
     {
@@ -74,14 +74,14 @@ const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
     },
 ];
 
-function formatError(error: unknown, fallback: string): string {
+const formatError = (error: unknown, fallback: string): string => {
     return error instanceof Error ? error.message : fallback;
-}
+};
 
-function wrapHandler(
+const wrapHandler = (
     definition: CommandDefinition,
     extensionUri: vscode.Uri,
-): (...args: unknown[]) => Promise<void> {
+): ((...args: unknown[]) => Promise<void>) => {
     return async (...args: unknown[]) => {
         let uri = args[0] as vscode.Uri | undefined;
 
@@ -110,9 +110,9 @@ function wrapHandler(
             vscode.window.showErrorMessage(formatError(error, definition.errorTitle));
         }
     };
-}
+};
 
-export function registerCommands(context: vscode.ExtensionContext): void {
+export const registerCommands = (context: vscode.ExtensionContext): void => {
     const extensionUri = context.extensionUri;
 
     for (const definition of createCommands(extensionUri)) {
@@ -120,4 +120,4 @@ export function registerCommands(context: vscode.ExtensionContext): void {
             vscode.commands.registerCommand(definition.id, wrapHandler(definition, extensionUri)),
         );
     }
-}
+};

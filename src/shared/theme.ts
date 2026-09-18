@@ -17,7 +17,7 @@ export interface PanelTheme {
     shadow: string;
 }
 
-export function getPanelTheme(isDark: boolean): PanelTheme {
+export const getPanelTheme = (isDark: boolean): PanelTheme => {
     return isDark
         ? {
               bg: '#0f1117',
@@ -55,4 +55,4 @@ export function getPanelTheme(isDark: boolean): PanelTheme {
               barTrack: '#eef1f7',
               shadow: '0 8px 32px rgba(15, 23, 42, 0.08)',
           };
-}
+};

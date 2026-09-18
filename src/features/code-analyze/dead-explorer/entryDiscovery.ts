@@ -13,11 +13,11 @@ interface EntryDiscoveryResult {
 }
 
 /** Discover webpack/vite/package entry seeds under workspaceRoot. */
-export async function discoverBundlerEntries(
+export const discoverBundlerEntries = async (
     workspaceFolder: vscode.WorkspaceFolder,
     workspaceRoot: string,
     extraGlobs: string[],
-): Promise<EntryDiscoveryResult> {
+): Promise<EntryDiscoveryResult> => {
     const entries = new Set<string>();
     const labels = new Map<string, string>();
 
@@ -83,15 +83,15 @@ export async function discoverBundlerEntries(
         entries: [...entries],
         labels,
     };
-}
+};
 
-function addResolved(
+const addResolved = (
     workspaceRoot: string,
     rel: string | undefined,
     entries: Set<string>,
     labels: Map<string, string>,
     label: string,
-): void {
+): void => {
     if (!rel) {
         return;
     }
@@ -102,9 +102,9 @@ function addResolved(
             labels.set(abs, label);
         }
     }
-}
+};
 
-function resolveExisting(root: string, rel: string): string | null {
+const resolveExisting = (root: string, rel: string): string | null => {
     const candidates = [
         path.join(root, rel),
         path.join(root, `${rel}.js`),
@@ -121,4 +121,4 @@ function resolveExisting(root: string, rel: string): string | null {
         }
     }
     return null;
-}
+};

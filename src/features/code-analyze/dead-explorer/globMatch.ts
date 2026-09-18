@@ -1,16 +1,16 @@
 import { escapeRegExp } from '../../../shared/string';
 
-function matchGlob(relativePath: string, pattern: string): boolean {
+const matchGlob = (relativePath: string, pattern: string): boolean => {
     const path = relativePath.replace(/\\/g, '/');
     const glob = pattern.replace(/\\/g, '/');
     return globToRegExp(glob).test(path);
-}
+};
 
-export function matchAnyGlob(relativePath: string, patterns: string[]): boolean {
+export const matchAnyGlob = (relativePath: string, patterns: string[]): boolean => {
     return patterns.some((pattern) => matchGlob(relativePath, pattern));
-}
+};
 
-function globToRegExp(glob: string): RegExp {
+const globToRegExp = (glob: string): RegExp => {
     let i = 0;
     let out = '^';
     while (i < glob.length) {
@@ -60,4 +60,4 @@ function globToRegExp(glob: string): RegExp {
     }
     out += '$';
     return new RegExp(out, 'i');
-}
+};

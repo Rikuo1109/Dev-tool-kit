@@ -19,7 +19,7 @@ const CLASS_KINDS = new Set(['class']);
 const FUNCTION_KINDS = new Set(['function', 'named', 'default', 'method']);
 const CONSTANT_KINDS = new Set(['const', 'let', 'var', 'enum']);
 
-function toDeadItem(item: UnusedExportItem): DeadItem {
+const toDeadItem = (item: UnusedExportItem): DeadItem => {
     return {
         relativePath: item.relativePath,
         absolutePath: item.absolutePath,
@@ -31,13 +31,15 @@ function toDeadItem(item: UnusedExportItem): DeadItem {
         reason: 'export_unused',
         falsePositiveHint: 'Export may be used via dynamic import or re-export aliases.',
     };
-}
+};
 
-function groupExports(unusedExports: UnusedExportItem[]): {
+const groupExports = (
+    unusedExports: UnusedExportItem[],
+): {
     deadClasses: DeadItem[];
     deadFunctions: DeadItem[];
     deadConstants: DeadItem[];
-} {
+} => {
     const deadClasses: DeadItem[] = [];
     const deadFunctions: DeadItem[] = [];
     const deadConstants: DeadItem[] = [];
@@ -53,7 +55,7 @@ function groupExports(unusedExports: UnusedExportItem[]): {
     }
 
     return { deadClasses, deadFunctions, deadConstants };
-}
+};
 
 export type {
     AnalyzeFileItem,
@@ -64,10 +66,10 @@ export type {
     UnusedExportItem,
 } from './types';
 
-export async function analyzeCodeInFolder(
+export const analyzeCodeInFolder = async (
     folderUri: vscode.Uri,
     existingPanel?: CodeAnalyzePanel,
-): Promise<void> {
+): Promise<void> => {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(folderUri);
     if (!workspaceFolder) {
         throw new Error('Folder is not inside a workspace');
@@ -166,4 +168,4 @@ export async function analyzeCodeInFolder(
         vscode.window.showErrorMessage(message);
         panel.dispose();
     }
-}
+};

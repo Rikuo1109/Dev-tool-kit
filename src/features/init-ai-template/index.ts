@@ -17,7 +17,7 @@ interface InitStepResult {
     detail?: string;
 }
 
-export async function initAiTemplate(): Promise<void> {
+export const initAiTemplate = async (): Promise<void> => {
     const workspaceFolder = await pickWorkspaceFolder();
     if (!workspaceFolder) {
         return;
@@ -163,9 +163,9 @@ export async function initAiTemplate(): Promise<void> {
                 void vscode.commands.executeCommand('workbench.action.reloadWindow');
             }
         });
-}
+};
 
-async function pickWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined> {
+const pickWorkspaceFolder = async (): Promise<vscode.WorkspaceFolder | undefined> => {
     const folders = vscode.workspace.workspaceFolders;
     if (!folders?.length) {
         vscode.window.showWarningMessage(
@@ -188,4 +188,4 @@ async function pickWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined
     );
 
     return pick?.folder;
-}
+};

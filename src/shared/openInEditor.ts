@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-export async function openFileInEditor(filePath: string, line = 0, column = 0): Promise<void> {
+export const openFileInEditor = async (filePath: string, line = 0, column = 0): Promise<void> => {
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
 
     const options: vscode.TextDocumentShowOptions = { preview: true };
@@ -14,4 +14,4 @@ export async function openFileInEditor(filePath: string, line = 0, column = 0): 
     }
 
     await vscode.window.showTextDocument(document, options);
-}
+};

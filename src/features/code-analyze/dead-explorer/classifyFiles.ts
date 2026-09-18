@@ -29,7 +29,7 @@ interface ClassifyFilesResult {
     summary: FilesSummary;
 }
 
-export function classifyDeadFiles(input: ClassifyFilesInput): ClassifyFilesResult {
+export const classifyDeadFiles = (input: ClassifyFilesInput): ClassifyFilesResult => {
     const {
         scopedFiles,
         index,
@@ -98,9 +98,9 @@ export function classifyDeadFiles(input: ClassifyFilesInput): ClassifyFilesResul
             byBucket,
         },
     };
-}
+};
 
-function classifyOne(args: {
+const classifyOne = (args: {
     filePath: string;
     relativePath: string;
     index: ImportIndex;
@@ -111,7 +111,7 @@ function classifyOne(args: {
     assetGraph: AssetGraph;
     contextDirs: string[];
     barrelProtected: Set<string>;
-}): DeadItem | null {
+}): DeadItem | null => {
     const {
         filePath,
         relativePath,
@@ -231,9 +231,9 @@ function classifyOne(args: {
         detail: 'Has importers but not reachable from discovered entries',
         falsePositiveHint: 'Missing entry seed or dynamic import — may be alive at runtime.',
     });
-}
+};
 
-function isPublicRuntime(relativePath: string, assetGraph: AssetGraph): boolean {
+const isPublicRuntime = (relativePath: string, assetGraph: AssetGraph): boolean => {
     const rel = relativePath.replace(/\\/g, '/');
     if (/service-worker|firebase-messaging-sw/i.test(rel)) {
         return true;
@@ -248,9 +248,9 @@ function isPublicRuntime(relativePath: string, assetGraph: AssetGraph): boolean 
     }
     // Unreferenced public file — still runtime-ish (copied wholesale often)
     return rel.startsWith('public/');
-}
+};
 
-function collectBarrelProtected(index: ImportIndex, reachable: Set<string>): Set<string> {
+const collectBarrelProtected = (index: ImportIndex, reachable: Set<string>): Set<string> => {
     const protectedPaths = new Set<string>();
 
     for (const filePath of index.files) {
@@ -271,9 +271,9 @@ function collectBarrelProtected(index: ImportIndex, reachable: Set<string>): Set
     }
 
     return protectedPaths;
-}
+};
 
-function item(
+const item = (
     relativePath: string,
     absolutePath: string,
     fields: {
@@ -283,7 +283,7 @@ function item(
         detail: string;
         falsePositiveHint?: string;
     },
-): DeadItem {
+): DeadItem => {
     return {
         relativePath,
         absolutePath,
@@ -293,9 +293,9 @@ function item(
         detail: fields.detail,
         falsePositiveHint: fields.falsePositiveHint,
     };
-}
+};
 
-function bucketRank(bucket: DeadBucket | undefined): number {
+const bucketRank = (bucket: DeadBucket | undefined): number => {
     switch (bucket) {
         case 'dead':
             return 0;
@@ -316,4 +316,4 @@ function bucketRank(bucket: DeadBucket | undefined): number {
         default:
             return 8;
     }
-}
+};

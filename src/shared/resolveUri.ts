@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-export async function resolveFolderUri(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
+export const resolveFolderUri = async (uri?: vscode.Uri): Promise<vscode.Uri | undefined> => {
     if (uri) {
         return uri;
     }
@@ -25,4 +25,4 @@ export async function resolveFolderUri(uri?: vscode.Uri): Promise<vscode.Uri | u
     );
 
     return pick?.folder.uri;
-}
+};

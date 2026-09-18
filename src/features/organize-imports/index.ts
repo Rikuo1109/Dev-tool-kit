@@ -8,7 +8,7 @@ const ORGANIZE_KIND = vscode.CodeActionKind.SourceOrganizeImports.value;
 const REMOVE_UNUSED_KIND = vscode.CodeActionKind.Source.append('removeUnusedImports').value;
 const SORT_KIND = vscode.CodeActionKind.Source.append('sortImports').value;
 
-export async function organizeImportsInFolder(folderUri: vscode.Uri): Promise<void> {
+export const organizeImportsInFolder = async (folderUri: vscode.Uri): Promise<void> => {
     const folderPath = folderUri.fsPath.replace(/\\/g, '/').replace(/\/$/, '');
     const folderName = folderPath.split(/[/\\]/).pop() ?? folderPath;
     const pattern = new vscode.RelativePattern(folderUri, SOURCE_GLOB);
@@ -100,16 +100,16 @@ export async function organizeImportsInFolder(folderUri: vscode.Uri): Promise<vo
             );
         }
     }
-}
+};
 
-function formatError(error: unknown): string {
+const formatError = (error: unknown): string => {
     if (error instanceof Error) {
         return error.message;
     }
     return String(error);
-}
+};
 
-function buildErrorSummary(files: FileOrganizeResult[]): { message: string; count: number }[] {
+const buildErrorSummary = (files: FileOrganizeResult[]): { message: string; count: number }[] => {
     const counts = new Map<string, number>();
 
     for (const file of files) {
@@ -122,9 +122,9 @@ function buildErrorSummary(files: FileOrganizeResult[]): { message: string; coun
     return [...counts.entries()]
         .map(([message, count]) => ({ message, count }))
         .sort((a, b) => b.count - a.count);
-}
+};
 
-async function organizeImportsInFile(uri: vscode.Uri): Promise<boolean> {
+const organizeImportsInFile = async (uri: vscode.Uri): Promise<boolean> => {
     const document = await vscode.workspace.openTextDocument(uri);
     const before = document.getText();
 
@@ -150,9 +150,9 @@ async function organizeImportsInFile(uri: vscode.Uri): Promise<boolean> {
     }
 
     return after !== before;
-}
+};
 
-async function applySourceAction(kind: string): Promise<void> {
+const applySourceAction = async (kind: string): Promise<void> => {
     try {
         await vscode.commands.executeCommand('editor.action.sourceAction', {
             kind,
@@ -161,4 +161,4 @@ async function applySourceAction(kind: string): Promise<void> {
     } catch {
         // Kind may be unavailable for this file type.
     }
-}
+};

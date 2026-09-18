@@ -17,11 +17,13 @@ interface FolderScanResult {
 
 let activePanel: vscode.WebviewPanel | undefined;
 
-function countCodeLines(content: string): {
+const countCodeLines = (
+    content: string,
+): {
     code: number;
     blank: number;
     comment: number;
-} {
+} => {
     const lines = content.split('\n');
     let code = 0,
         blank = 0,
@@ -54,12 +56,12 @@ function countCodeLines(content: string): {
     }
 
     return { code, blank, comment };
-}
+};
 
-function countFilesInDir(
+const countFilesInDir = (
     dirPath: string,
     excludeDirs = new Set(['node_modules', 'dist', 'build', '.git', '.gitnexus']),
-): FolderScanResult {
+): FolderScanResult => {
     const result: Record<string, unknown> = {};
     const foundTodos: TodoItem[] = [];
     let totalFiles = 0;
@@ -73,7 +75,7 @@ function countFilesInDir(
     const filesToCheck: string[] = [];
     const compressedExts = new Set(['.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z', '.rar', '.xz']);
 
-    function walkDir(dir: string) {
+    const walkDir = (dir: string) => {
         try {
             const pending: { fullPath: string; isDir: boolean }[] = [];
             for (const entry of readdirSync(dir)) {
@@ -112,7 +114,7 @@ function countFilesInDir(
         } catch {
             // Skip unreadable dirs
         }
-    }
+    };
 
     walkDir(dirPath);
 
@@ -187,9 +189,9 @@ function countFilesInDir(
         todos: ranked.todos,
         todoTotal: ranked.todoTotal,
     };
-}
+};
 
-export async function openDashboard(folder: string, extensionUri: vscode.Uri): Promise<void> {
+export const openDashboard = async (folder: string, extensionUri: vscode.Uri): Promise<void> => {
     const folderName = folder.split(/[/\\]/).pop() ?? folder;
 
     if (activePanel) {
@@ -272,4 +274,4 @@ export async function openDashboard(folder: string, extensionUri: vscode.Uri): P
         const message = error instanceof Error ? error.message : 'Failed to analyze folder';
         vscode.window.showErrorMessage(message);
     }
-}
+};

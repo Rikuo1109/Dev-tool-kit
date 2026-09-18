@@ -10,11 +10,11 @@ export interface TodoItem {
     text: string;
 }
 
-export function scanTodosInContent(
+export const scanTodosInContent = (
     content: string,
     absolutePath: string,
     relativePath: string,
-): TodoItem[] {
+): TodoItem[] => {
     const items: TodoItem[] = [];
     const lines = content.split('\n');
 
@@ -40,12 +40,14 @@ export function scanTodosInContent(
     }
 
     return items;
-}
+};
 
-export function rankTodos(todos: TodoItem[]): {
+export const rankTodos = (
+    todos: TodoItem[],
+): {
     todos: TodoItem[];
     todoTotal: number;
-} {
+} => {
     const sorted = [...todos].sort(
         (a, b) =>
             (a.tag === 'FIXME' ? 0 : 1) - (b.tag === 'FIXME' ? 0 : 1) ||
@@ -57,4 +59,4 @@ export function rankTodos(todos: TodoItem[]): {
         todoTotal: sorted.length,
         todos: sorted.slice(0, TODO_DISPLAY_LIMIT),
     };
-}
+};

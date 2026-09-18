@@ -16,7 +16,7 @@ export const extractCodeBlocks = (source: string, filePath: string) => {
     return extractBraceBlocks(source);
 };
 
-function extractPythonBlocks(source: string): CodeBlock[] {
+const extractPythonBlocks = (source: string): CodeBlock[] => {
     const lines = source.split('\n');
     const blocks: CodeBlock[] = [];
     for (let i = 0; i < lines.length; i++) {
@@ -47,9 +47,9 @@ function extractPythonBlocks(source: string): CodeBlock[] {
         });
     }
     return dedupeBlocks(blocks);
-}
+};
 
-function extractJavaBlocks(source: string): CodeBlock[] {
+const extractJavaBlocks = (source: string): CodeBlock[] => {
     const openers = [
         /(?:^|\n)\s*(?:@[\w().,\s"=]+\s+)*(?:public|private|protected)\s+(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?(?:<[^>]+>\s+)?[\w\[\].,\s<>?]+\s+\w+\s*\([^{;]*\)\s*\{/g,
         /(?:^|\n)\s*(?:@[\w().,\s"=]+\s+)*[\w\[\].,\s<>?]+\s+\w+\s*\([^{;]*\)\s*\{/g,
@@ -73,7 +73,7 @@ function extractJavaBlocks(source: string): CodeBlock[] {
         }
     }
     return dedupeBlocks(blocks);
-}
+};
 
 const extractBraceBlocks = (source: string) => {
     const blocks: CodeBlock[] = [];

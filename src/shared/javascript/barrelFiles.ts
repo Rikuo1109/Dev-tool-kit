@@ -5,15 +5,15 @@ import { ImportIndex } from './importGraph';
 const INDEX_FILE_RE = /[/\\]index\.(tsx?|jsx?|mjs|cjs)$/i;
 const REEXPORT_FROM_RE = /export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"]([^'"]+)['"]/g;
 
-export function isIndexBarrelFile(filePath: string): boolean {
+export const isIndexBarrelFile = (filePath: string): boolean => {
     return INDEX_FILE_RE.test(filePath);
-}
+};
 
-export function getLocalReexportTargets(
+export const getLocalReexportTargets = (
     content: string,
     filePath: string,
     index: ImportIndex,
-): string[] {
+): string[] => {
     const dir = normalizePath(path.dirname(filePath));
     const targets = new Set<string>();
 
@@ -30,13 +30,13 @@ export function getLocalReexportTargets(
     }
 
     return [...targets];
-}
+};
 
-export function isActiveBarrel(
+export const isActiveBarrel = (
     filePath: string,
     index: ImportIndex,
     reachable?: Set<string>,
-): boolean {
+): boolean => {
     if (!isIndexBarrelFile(filePath)) {
         return false;
     }
@@ -70,9 +70,9 @@ export function isActiveBarrel(
     }
 
     return false;
-}
+};
 
-export function isReexportOnlyBarrel(content: string, filePath: string): boolean {
+export const isReexportOnlyBarrel = (content: string, filePath: string): boolean => {
     if (!isIndexBarrelFile(filePath)) {
         return false;
     }
@@ -90,5 +90,10 @@ export function isReexportOnlyBarrel(content: string, filePath: string): boolean
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean);
-    return lines.every((line) => /^export\s+/.test(line) && /from\s+['"]/.test(line));
-}
+    return lines.every(
+        (line) =>
+            /^export\s+\*\s+(?:as\s+\w+\s+)?from\s+['"]/.test(line) ||
+            /^export\s+\{[^}]*\}\s+from\s+['"]/.test(line) ||
+            /^export\s+default\s+from\s+['"]/.test(line),
+    );
+};

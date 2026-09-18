@@ -6,7 +6,7 @@ import { resolvePythonModule } from './graph';
 const SCRIPT_SECTION_RE = /\[(?:project\.scripts|tool\.poetry\.scripts)\]([\s\S]*?)(?:\n\[|$)/g;
 const SCRIPT_ENTRY_RE = /^\s*[\w.-]+\s*=\s*["']([\w.]+):[\w.]+["']/gm;
 
-export function discoverPythonEntryPoints(workspaceRoot: string): string[] {
+export const discoverPythonEntryPoints = (workspaceRoot: string): string[] => {
     const entries = new Set<string>();
 
     for (const pyprojectPath of findPyprojectFiles(workspaceRoot)) {
@@ -24,9 +24,9 @@ export function discoverPythonEntryPoints(workspaceRoot: string): string[] {
     }
 
     return [...entries];
-}
+};
 
-function parseScriptModules(content: string): string[] {
+const parseScriptModules = (content: string): string[] => {
     const modules = new Set<string>();
 
     SCRIPT_SECTION_RE.lastIndex = 0;
@@ -41,23 +41,28 @@ function parseScriptModules(content: string): string[] {
     }
 
     return [...modules];
-}
+};
 
-function findPyprojectFiles(workspaceRoot: string): string[] {
+const findPyprojectFiles = (workspaceRoot: string): string[] => {
     const results: string[] = [];
     walkForFile(workspaceRoot, 'pyproject.toml', results, 0, 4);
     return results;
-}
+};
 
-function findPythonFilesWithMainGuard(workspaceRoot: string): string[] {
+const findPythonFilesWithMainGuard = (workspaceRoot: string): string[] => {
     const results: string[] = [];
     walkForPythonFiles(workspaceRoot, results, 0, 6);
     return results.filter((filePath) =>
         /if\s+__name__\s*==\s*['"]__main__['"]/.test(readFileSafe(filePath)),
     );
-}
+};
 
-function walkForPythonFiles(dir: string, results: string[], depth: number, maxDepth: number): void {
+const walkForPythonFiles = (
+    dir: string,
+    results: string[],
+    depth: number,
+    maxDepth: number,
+): void => {
     if (depth > maxDepth) {
         return;
     }
@@ -88,4 +93,4 @@ function walkForPythonFiles(dir: string, results: string[], depth: number, maxDe
             walkForPythonFiles(fullPath, results, depth + 1, maxDepth);
         }
     }
-}
+};

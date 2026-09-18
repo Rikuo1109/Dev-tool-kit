@@ -86,7 +86,7 @@ export class OrganizeImportsPanel {
     }
 }
 
-function getPanelHtml(folderName: string, total: number, isDark: boolean): string {
+const getPanelHtml = (folderName: string, total: number, isDark: boolean): string => {
     const t = getPanelTheme(isDark);
 
     return panelDocument({
@@ -347,4 +347,4 @@ function getPanelHtml(folderName: string, total: number, isDark: boolean): strin
   </script>
     `,
     });
-}
+};

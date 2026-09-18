@@ -15,12 +15,28 @@ This project is indexed by GitNexus as **kyo-tools** (479 symbols, 1270 relation
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
 - For security review, `explain({target: "fileOrSymbol"})` lists taint findings (source→sink flows; needs `analyze --pdg`).
 
+## Code Style
+
+- **ALWAYS use arrow functions** for function declarations. `function foo()` is forbidden.
+  ```ts
+  // ✅ Good
+  const foo = () => { ... }
+  const foo = async (x: string) => { ... }
+  export const foo = (x: string): string => { ... }
+
+  // ❌ Bad — will trigger eslint warn
+  function foo() { ... }
+  async function foo(x: string) { ... }
+  export function foo(x: string): string { ... }
+  ```
+
 ## Never Do
 
 - NEVER edit a function, class, or method without first running `impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
 - NEVER commit changes without running `detect_changes()` to check affected scope.
+- NEVER use bare `function` declarations — always use arrow function syntax (`const fn = () => {}`).
 
 ## Resources
 

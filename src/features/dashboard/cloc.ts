@@ -62,7 +62,7 @@ const LANG_COLORS = [
     '#84cc16',
 ];
 
-export function parseClocData(
+export const parseClocData = (
     raw: Record<string, unknown>,
     folder: string,
     folderName: string,
@@ -70,7 +70,7 @@ export function parseClocData(
     subrepoCount = 0,
     todos: TodoItem[] = [],
     todoTotal = 0,
-): DashboardData {
+): DashboardData => {
     const normalizedFolder = folder.replace(/\\/g, '/').replace(/\/$/, '');
     const filesByLang = new Map<string, FileStat[]>();
 
@@ -133,18 +133,18 @@ export function parseClocData(
         todos,
         todoTotal,
     };
-}
+};
 
 export interface DashboardWebviewAssets {
     chartScriptUri: string;
     cspSource: string;
 }
 
-export function getDashboardHtml(
+export const getDashboardHtml = (
     data: DashboardData,
     isDark: boolean,
     assets: DashboardWebviewAssets,
-): string {
+): string => {
     const theme = getPanelTheme(isDark);
 
     const chartColors = data.languages.map((_, i) => LANG_COLORS[i % LANG_COLORS.length]);
@@ -963,4 +963,4 @@ export function getDashboardHtml(
   </script>
     `,
     });
-}
+};

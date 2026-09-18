@@ -10,13 +10,13 @@ import {
 import { getPanelTheme, PanelTheme } from '../../shared/theme';
 import { CodeAnalyzeReport, DeadItem } from './types';
 
-function rowDataAttrs(absolutePath: string, line = 0): string {
+const rowDataAttrs = (absolutePath: string, line = 0): string => {
     return `data-path="${encodeURIComponent(absolutePath)}" data-line="${line}"`;
-}
+};
 
 const reloadBtn = `<button type="button" class="toolbar-btn" id="reload-btn">Reload</button>`;
 
-function panelExtraStyles(t: PanelTheme): string {
+const panelExtraStyles = (t: PanelTheme): string => {
     return `
     .sticky-chrome {
       position: sticky;
@@ -150,9 +150,9 @@ function panelExtraStyles(t: PanelTheme): string {
       color: ${t.accent};
     }
   `;
-}
+};
 
-function getLoadingHtml(folderName: string, isDark: boolean): string {
+const getLoadingHtml = (folderName: string, isDark: boolean): string => {
     const t = getPanelTheme(isDark);
 
     return panelDocument({
@@ -171,14 +171,13 @@ function getLoadingHtml(folderName: string, isDark: boolean): string {
       </script>
     `,
     });
-}
+};
 
-function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
+const getReportHtml = (report: CodeAnalyzeReport, isDark: boolean): string => {
     const t = getPanelTheme(isDark);
     const totalIssues =
         report.unusedFiles.length +
         report.orphanModules.length +
-        report.unusedExports.length +
         report.largeFiles.length +
         report.largeFunctions.length +
         report.deadClasses.length +
@@ -412,7 +411,7 @@ function getReportHtml(report: CodeAnalyzeReport, isDark: boolean): string {
       </script>
     `,
     });
-}
+};
 
 export class CodeAnalyzePanel {
     private readonly panel: vscode.WebviewPanel;

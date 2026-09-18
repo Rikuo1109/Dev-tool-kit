@@ -16,7 +16,8 @@ import { lineAt, scriptContent } from '../../shared/code-parser';
 
 const DEFAULT_ENTRY_GLOBS = [
     '**/main.{ts,tsx,js,jsx}',
-    '**/index.{ts,tsx,js,jsx}',
+    'index.{ts,tsx,js,jsx}',
+    'src/index.{ts,tsx,js,jsx}',
     '**/App.{tsx,jsx}',
     '**/*.config.{ts,js,mjs,cjs}',
     '**/vite.config.*',
@@ -45,7 +46,7 @@ const DEFAULT_EXCLUDE_GLOBS = [
     '**/test/**',
 ];
 
-export function getAnalyzeConfig(): CodeAnalyzeConfig {
+export const getAnalyzeConfig = (): CodeAnalyzeConfig => {
     const config = vscode.workspace.getConfiguration('kyo-tools.codeAnalyze');
     const legacy = vscode.workspace.getConfiguration('kyo-tools.deadCode');
 
@@ -59,7 +60,7 @@ export function getAnalyzeConfig(): CodeAnalyzeConfig {
         largeFunctionLoc: config.get<number>('largeFunctionLoc', 80),
         largeFunctionParams: config.get<number>('largeFunctionParams', 5),
     };
-}
+};
 
 const DEFAULT_DEAD_ENTRY_GLOBS = [
     '**/mobile.{js,jsx,ts,tsx}',
@@ -95,7 +96,7 @@ const DEFAULT_TOOLING_GLOBS = [
 
 const DEFAULT_AMBIENT_GLOBS = ['**/*.d.ts', '**/react-app-env.d.ts'];
 
-export function getDeadCodeExplorerConfig(): DeadCodeExplorerConfig {
+export const getDeadCodeExplorerConfig = (): DeadCodeExplorerConfig => {
     const config = vscode.workspace.getConfiguration('kyo-tools.deadCodeExplorer');
 
     const readArray = (key: string, fallback: string[]): string[] =>
@@ -112,9 +113,9 @@ export function getDeadCodeExplorerConfig(): DeadCodeExplorerConfig {
         primaryBuckets: primary.length > 0 ? primary : [...PRIMARY_BUCKETS],
         discoverBundlerEntries: config.get<boolean>('discoverBundlerEntries', true),
     };
-}
+};
 
-export function findUnusedFiles(scopedFiles: string[], index: ImportIndex): AnalyzeFileItem[] {
+export const findUnusedFiles = (scopedFiles: string[], index: ImportIndex): AnalyzeFileItem[] => {
     const items: AnalyzeFileItem[] = [];
 
     for (const filePath of scopedFiles) {
@@ -134,9 +135,9 @@ export function findUnusedFiles(scopedFiles: string[], index: ImportIndex): Anal
     }
 
     return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-}
+};
 
-export function findOrphanModules(scopedFiles: string[], index: ImportIndex): AnalyzeFileItem[] {
+export const findOrphanModules = (scopedFiles: string[], index: ImportIndex): AnalyzeFileItem[] => {
     const reachable = findReachableFiles(index, index.entryPoints);
     const items: AnalyzeFileItem[] = [];
 
@@ -155,55 +156,102 @@ export function findOrphanModules(scopedFiles: string[], index: ImportIndex): An
     }
 
     return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-}
+};
 
-function buildStarReexportMap(index: ImportIndex): Map<string, Set<string>> {
-    const map = new Map<string, Set<string>>();
+const buildReexportMap = (
+    index: ImportIndex,
+): {
+    starMap: Map<string, Set<string>>;
+    namedMap: Map<string, Map<string, Set<string>>>;
+} => {
+    const starMap = new Map<string, Set<string>>();
+    const namedMap = new Map<string, Map<string, Set<string>>>();
     const starRe = /export\s+\*\s+(?:as\s+\w+\s+)?from\s+['"]([^'"]+)['"]/g;
+    const namedRe = /export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
     for (const filePath of index.files) {
         const content = index.getContent(filePath);
+
         starRe.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = starRe.exec(content)) !== null) {
-            const resolved = index.resolve(filePath, match[1]);
+        let starMatch: RegExpExecArray | null;
+        while ((starMatch = starRe.exec(content)) !== null) {
+            const resolved = index.resolve(filePath, starMatch[1]);
             if (!resolved || resolved === 'external') {
                 continue;
             }
-            const set = map.get(resolved) ?? new Set<string>();
+            const set = starMap.get(resolved) ?? new Set<string>();
             set.add(filePath);
-            map.set(resolved, set);
+            starMap.set(resolved, set);
+        }
+
+        namedRe.lastIndex = 0;
+        let namedMatch: RegExpExecArray | null;
+        while ((namedMatch = namedRe.exec(content)) !== null) {
+            const resolved = index.resolve(filePath, namedMatch[2]);
+            if (!resolved || resolved === 'external') {
+                continue;
+            }
+            const barrelNames = namedMap.get(resolved) ?? new Map<string, Set<string>>();
+            for (const part of namedMatch[1].split(',')) {
+                const trimmed = part.trim();
+                if (!trimmed) {
+                    continue;
+                }
+                const alias = trimmed.split(/\s+as\s+/);
+                const exportedName = (alias[1] ?? alias[0]).trim();
+                const set = barrelNames.get(exportedName) ?? new Set<string>();
+                set.add(filePath);
+                barrelNames.set(exportedName, set);
+            }
+            namedMap.set(resolved, barrelNames);
         }
     }
-    return map;
-}
+    return { starMap, namedMap };
+};
 
-function isReexportedViaAliveBarrel(
+const isReexportedViaAliveBarrel = (
     modulePath: string,
     index: ImportIndex,
-    starMap: Map<string, Set<string>>,
+    reexports: {
+        starMap: Map<string, Set<string>>;
+        namedMap: Map<string, Map<string, Set<string>>>;
+    },
     reachable: Set<string>,
-): boolean {
-    const barrels = starMap.get(modulePath);
-    if (!barrels || barrels.size === 0) {
-        return false;
-    }
-    for (const barrel of barrels) {
-        if (index.entryPoints.has(barrel)) {
-            return true;
-        }
-        if (reachable.has(barrel)) {
-            return true;
-        }
-        if (index.getImporters(barrel).length > 0) {
-            return true;
+): boolean => {
+    const starBarrels = reexports.starMap.get(modulePath);
+    if (starBarrels && starBarrels.size > 0) {
+        for (const barrel of starBarrels) {
+            if (index.entryPoints.has(barrel) || reachable.has(barrel)) {
+                return true;
+            }
+            if (index.getImporters(barrel).length > 0) {
+                return true;
+            }
         }
     }
+
+    const namedBarrels = reexports.namedMap.get(modulePath);
+    if (namedBarrels && namedBarrels.size > 0) {
+        for (const [, barrelSet] of namedBarrels) {
+            for (const barrel of barrelSet) {
+                if (index.entryPoints.has(barrel) || reachable.has(barrel)) {
+                    return true;
+                }
+                if (index.getImporters(barrel).length > 0) {
+                    return true;
+                }
+            }
+        }
+    }
+
     return false;
-}
-export function findUnusedExports(scopedFiles: string[], index: ImportIndex): UnusedExportItem[] {
+};
+export const findUnusedExports = (
+    scopedFiles: string[],
+    index: ImportIndex,
+): UnusedExportItem[] => {
     const items: UnusedExportItem[] = [];
 
-    const starMap = buildStarReexportMap(index);
+    const reexports = buildReexportMap(index);
     const reachable = findReachableFiles(index, index.entryPoints);
 
     for (const filePath of scopedFiles) {
@@ -215,7 +263,7 @@ export function findUnusedExports(scopedFiles: string[], index: ImportIndex): Un
             continue;
         }
 
-        const starReexported = isReexportedViaAliveBarrel(filePath, index, starMap, reachable);
+        const starReexported = isReexportedViaAliveBarrel(filePath, index, reexports, reachable);
 
         const exports = extractJavaScriptExports(content, filePath);
         if (exports.length === 0) {
@@ -249,13 +297,13 @@ export function findUnusedExports(scopedFiles: string[], index: ImportIndex): Un
             a.relativePath.localeCompare(b.relativePath) ||
             a.exportName.localeCompare(b.exportName),
     );
-}
+};
 
-function toExportItem(
+const toExportItem = (
     index: ImportIndex,
     filePath: string,
     exp: ExtractedExport,
-): UnusedExportItem {
+): UnusedExportItem => {
     return {
         relativePath: index.relativePath(filePath),
         absolutePath: filePath,
@@ -263,7 +311,7 @@ function toExportItem(
         kind: exp.kind,
         line: exp.line,
     };
-}
+};
 
 interface ExtractedExport {
     name: string;
@@ -273,7 +321,7 @@ interface ExtractedExport {
     line?: number;
 }
 
-function extractJavaScriptExports(content: string, filePath: string): ExtractedExport[] {
+const extractJavaScriptExports = (content: string, filePath: string): ExtractedExport[] => {
     const source = scriptContent(content, filePath);
     const exports: ExtractedExport[] = [];
     const seen = new Set<string>();
@@ -364,16 +412,16 @@ function extractJavaScriptExports(content: string, filePath: string): ExtractedE
     }
 
     return exports;
-}
+};
 
-function collectJavaScriptExportUsage(
+const collectJavaScriptExportUsage = (
     index: ImportIndex,
     modulePath: string,
 ): {
     named: Set<string>;
     defaultImport: boolean;
     namespaceImports: boolean;
-} {
+} => {
     const named = new Set<string>();
     let defaultImport = false;
     let namespaceImports = false;
@@ -414,4 +462,4 @@ function collectJavaScriptExportUsage(
     }
 
     return { named, defaultImport, namespaceImports };
-}
+};

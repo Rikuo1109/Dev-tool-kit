@@ -21,11 +21,11 @@ export interface AssetGraph {
 }
 
 /** Build runtime/public asset graph from webpack copy patterns + string refs. */
-export async function buildAssetGraph(
+export const buildAssetGraph = async (
     workspaceFolder: vscode.WorkspaceFolder,
     workspaceRoot: string,
     index: ImportIndex,
-): Promise<AssetGraph> {
+): Promise<AssetGraph> => {
     const aliveAssets = new Set<string>();
     const urlFragments = new Set<string>();
 
@@ -97,9 +97,9 @@ export async function buildAssetGraph(
     }
 
     return { aliveAssets, urlFragments };
-}
+};
 
-function collectUrlFragments(content: string, urlFragments: Set<string>): void {
+const collectUrlFragments = (content: string, urlFragments: Set<string>): void => {
     for (const re of [PUBLIC_URL_RE, SW_REGISTER_RE, IMPORT_SCRIPTS_RE]) {
         re.lastIndex = 0;
         let match: RegExpExecArray | null;
@@ -112,14 +112,14 @@ function collectUrlFragments(content: string, urlFragments: Set<string>): void {
             }
         }
     }
-}
+};
 
-function resolvePublicRef(
+const resolvePublicRef = (
     workspaceRoot: string,
     ref: string,
     aliveAssets: Set<string>,
     urlFragments: Set<string>,
-): void {
+): void => {
     const cleaned = ref.replace(/^\//, '').replace(/^\.\//, '');
     urlFragments.add(cleaned);
     const candidates = [
@@ -131,9 +131,9 @@ function resolvePublicRef(
             aliveAssets.add(normalizePath(candidate));
         }
     }
-}
+};
 
-function markTreeIfExists(absPath: string, aliveAssets: Set<string>): void {
+const markTreeIfExists = (absPath: string, aliveAssets: Set<string>): void => {
     if (!fs.existsSync(absPath)) {
         return;
     }
@@ -147,4 +147,4 @@ function markTreeIfExists(absPath: string, aliveAssets: Set<string>): void {
     }
     // ponytail: ceiling — shallow mark dir itself; files matched via fragment/index walk
     aliveAssets.add(normalizePath(absPath));
-}
+};

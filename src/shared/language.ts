@@ -1,6 +1,6 @@
 export type SourceLanguage = 'javascript' | 'python' | 'java' | 'unknown';
 
-export function getSourceLanguage(filePath: string): SourceLanguage {
+export const getSourceLanguage = (filePath: string): SourceLanguage => {
     if (/\.(tsx?|jsx?|mjs|cjs|vue)$/i.test(filePath)) {
         return 'javascript';
     }
@@ -11,8 +11,8 @@ export function getSourceLanguage(filePath: string): SourceLanguage {
         return 'java';
     }
     return 'unknown';
-}
+};
 
-export function isJavaScriptSource(filePath: string): boolean {
+export const isJavaScriptSource = (filePath: string): boolean => {
     return getSourceLanguage(filePath) === 'javascript';
-}
+};

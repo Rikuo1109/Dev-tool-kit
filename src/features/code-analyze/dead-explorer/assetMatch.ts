@@ -1,4 +1,4 @@
-export function isAssetReferenced(relativePath: string, urlFragments: Set<string>): boolean {
+export const isAssetReferenced = (relativePath: string, urlFragments: Set<string>): boolean => {
     const rel = relativePath.replace(/\\/g, '/');
     const withoutPublic = rel.replace(/^public\//, '');
 
@@ -21,4 +21,4 @@ export function isAssetReferenced(relativePath: string, urlFragments: Set<string
         }
     }
     return false;
-}
+};
