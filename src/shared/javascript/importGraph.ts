@@ -69,328 +69,6 @@ export type ResolvedImport =
     | { type: 'external'; name: string }
     | { type: 'unresolved'; specifier: string };
 
-export const buildImportIndex = async (
-    workspaceFolder: vscode.WorkspaceFolder,
-    entryGlobs: string[],
-    excludeGlobs: string[],
-): Promise<ImportIndex> => {
-    const workspaceRoot = workspaceFolder.uri.fsPath;
-    const cached = getCachedImportIndex(workspaceRoot);
-    if (cached) {
-        return cached;
-    }
-    const uris = await vscode.workspace.findFiles(
-        new vscode.RelativePattern(workspaceFolder, ANALYZE_SOURCE_GLOB),
-        EXCLUDE_GLOB,
-    );
-
-    const excluded = new Set<string>();
-    for (const pattern of excludeGlobs) {
-        const matches = await vscode.workspace.findFiles(
-            new vscode.RelativePattern(workspaceFolder, pattern),
-            EXCLUDE_GLOB,
-        );
-        for (const uri of matches) {
-            excluded.add(normalizePath(uri.fsPath));
-        }
-    }
-
-    const gitRoot = findGitRoot(workspaceRoot) ?? workspaceRoot;
-
-    const files = filterGitIgnoredPaths(
-        gitRoot,
-        uris.map((uri) => normalizePath(uri.fsPath)).filter((filePath) => !excluded.has(filePath)),
-    );
-
-    const getContent = createContentCache();
-
-    const javaFiles = files.filter((filePath) => getSourceLanguage(filePath) === 'java');
-    const javaTypeIndex = buildJavaTypeIndex(javaFiles, getContent);
-
-    const entryPoints = await findEntryPoints(workspaceFolder, workspaceRoot, entryGlobs);
-    for (const filePath of filterGitIgnoredPaths(
-        gitRoot,
-        discoverJavaEntryPoints(workspaceRoot, javaFiles, javaTypeIndex, getContent),
-    )) {
-        entryPoints.add(filePath);
-    }
-    for (const filePath of filterGitIgnoredPaths(
-        gitRoot,
-        discoverPythonEntryPoints(workspaceRoot),
-    )) {
-        entryPoints.add(normalizePath(filePath));
-    }
-    for (const filePath of files) {
-        if (
-            /(^|\/)(vite|webpack|jest|eslint|prettier|tailwind|postcss|next)\.config\.(t|j)sx?$/i.test(
-                filePath,
-            )
-        ) {
-            entryPoints.add(filePath);
-        }
-    }
-
-    for (const entry of [...entryPoints]) {
-        if (isReexportOnlyBarrel(getContent(entry), entry)) {
-            entryPoints.delete(entry);
-        }
-    }
-
-    const tsConfigCache = new Map<string, TsConfigContext>();
-    const dependencies = new Map<string, Set<string>>();
-    const importers = new Map<string, Set<string>>();
-    const importsByFile = new Map<string, ParsedImport[]>();
-
-    const getTsConfig = (fromFile: string): TsConfigContext => {
-        const dir = path.dirname(fromFile);
-        const cached = tsConfigCache.get(dir);
-        if (cached) {
-            return cached;
-        }
-        const ctx = loadTsConfigForFile(fromFile, workspaceRoot);
-        tsConfigCache.set(dir, ctx);
-        return ctx;
-    };
-
-    const resolve = (fromFile: string, specifier: string): string | 'external' | null => {
-        const resolved = resolveImport(fromFile, specifier, workspaceRoot, getTsConfig(fromFile));
-        if (!resolved) {
-            return null;
-        }
-        if (resolved.type === 'internal') {
-            return resolved.fsPath;
-        }
-        if (resolved.type === 'external') {
-            return 'external';
-        }
-        return null;
-    };
-
-    for (const filePath of files) {
-        const parsed = parseDetailedImports(
-            getContent(filePath),
-            filePath,
-            (spec) => resolve(filePath, spec),
-            workspaceRoot,
-            javaTypeIndex,
-        );
-        importsByFile.set(filePath, parsed);
-
-        const deps = new Set<string>();
-        for (const item of parsed) {
-            if (!item.resolvedPath) {
-                continue;
-            }
-            deps.add(item.resolvedPath);
-            const rev = importers.get(item.resolvedPath) ?? new Set<string>();
-            rev.add(filePath);
-            importers.set(item.resolvedPath, rev);
-        }
-        dependencies.set(filePath, deps);
-    }
-
-    const result: ImportIndex = {
-        workspaceRoot,
-        files,
-        entryPoints,
-        relativePath: (absPath) => toRelativePath(absPath, workspaceRoot),
-        getContent,
-        getDependencies: (absPath) => [...(dependencies.get(absPath) ?? [])],
-        getImporters: (absPath) => [...(importers.get(absPath) ?? [])],
-        getImports: (absPath) => importsByFile.get(absPath) ?? [],
-        resolve,
-        javaTypeIndex,
-    };
-
-    setCachedImportIndex(workspaceRoot, result);
-
-    return result;
-};
-
-export const findReachableFiles = (index: ImportIndex, seeds: Set<string>): Set<string> => {
-    const reachable = new Set<string>();
-    const queue = [...seeds];
-
-    while (queue.length > 0) {
-        const current = queue.pop();
-        if (!current || reachable.has(current)) {
-            continue;
-        }
-        reachable.add(current);
-        for (const dep of index.getDependencies(current)) {
-            if (!reachable.has(dep)) {
-                queue.push(dep);
-            }
-        }
-    }
-
-    return reachable;
-};
-
-const findEntryPoints = async (
-    workspaceFolder: vscode.WorkspaceFolder,
-    workspaceRoot: string,
-    entryGlobs: string[],
-): Promise<Set<string>> => {
-    const entries = new Set<string>();
-
-    for (const pattern of entryGlobs) {
-        const matches = await vscode.workspace.findFiles(
-            new vscode.RelativePattern(workspaceFolder, pattern),
-            EXCLUDE_GLOB,
-        );
-        for (const uri of matches) {
-            entries.add(normalizePath(uri.fsPath));
-        }
-    }
-
-    const packageJsonPath = path.join(workspaceRoot, 'package.json');
-    if (fs.existsSync(packageJsonPath)) {
-        try {
-            const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
-                main?: string;
-                module?: string;
-            };
-            for (const field of [pkg.main, pkg.module]) {
-                if (!field) {
-                    continue;
-                }
-                const resolved = resolveFilePath(workspaceRoot, field.replace(/^\.\//, ''));
-                if (resolved) {
-                    entries.add(resolved);
-                }
-            }
-        } catch {
-            // ignore invalid package.json
-        }
-    }
-
-    const gitRoot = findGitRoot(workspaceRoot) ?? workspaceRoot;
-    return new Set(filterGitIgnoredPaths(gitRoot, [...entries]));
-};
-
-const parseDetailedImports = (
-    content: string,
-    filePath: string,
-    resolveFn: (specifier: string) => string | 'external' | null,
-    workspaceRoot: string,
-    javaTypeIndex: JavaTypeIndex,
-): ParsedImport[] => {
-    const language = getSourceLanguage(filePath);
-
-    if (language === 'python') {
-        return parsePythonImports(content, filePath, workspaceRoot).map((resolvedPath) => ({
-            specifier: resolvedPath,
-            resolvedPath,
-            named: new Set<string>(),
-            defaultImport: false,
-            namespace: false,
-            sideEffect: true,
-        }));
-    }
-
-    if (language === 'java') {
-        return parseJavaImports(content, filePath, javaTypeIndex).map((resolvedPath) => ({
-            specifier: resolvedPath,
-            resolvedPath,
-            named: new Set<string>(),
-            defaultImport: false,
-            namespace: false,
-            sideEffect: true,
-        }));
-    }
-
-    const source = filePath.endsWith('.vue') ? extractVueScript(content) : content;
-    const results: ParsedImport[] = [];
-    const seen = new Set<string>();
-
-    const add = (specifier: string, clause: string, sideEffect = false) => {
-        const key = `${specifier}::${clause}::${sideEffect}`;
-        if (seen.has(key)) {
-            return;
-        }
-        seen.add(key);
-
-        const resolved = resolveFn(specifier);
-        const parsed = parseImportClause(clause);
-        results.push({
-            specifier,
-            resolvedPath: resolved === 'external' ? null : resolved,
-            named: parsed.named,
-            defaultImport: parsed.defaultImport,
-            namespace: parsed.namespace,
-            sideEffect,
-        });
-    };
-
-    for (const regex of [IMPORT_FROM_RE, EXPORT_FROM_RE]) {
-        regex.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = regex.exec(source)) !== null) {
-            add(match[3], match[2].trim(), false);
-        }
-    }
-
-    SIDE_EFFECT_IMPORT_RE.lastIndex = 0;
-    let sideMatch: RegExpExecArray | null;
-    while ((sideMatch = SIDE_EFFECT_IMPORT_RE.exec(source)) !== null) {
-        if (/from\s+['"]/.test(sideMatch[0])) {
-            continue;
-        }
-        add(sideMatch[1], '', true);
-    }
-
-    for (const regex of [REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
-        regex.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = regex.exec(source)) !== null) {
-            add(match[1], '', true);
-        }
-    }
-
-    return results;
-};
-
-const parseImportClause = (
-    clause: string,
-): {
-    named: Set<string>;
-    defaultImport: boolean;
-    namespace: boolean;
-} => {
-    const named = new Set<string>();
-    let defaultImport = false;
-    let namespace = false;
-
-    if (!clause) {
-        return { named, defaultImport, namespace };
-    }
-
-    if (/^\*\s+as\s+\w+/.test(clause)) {
-        namespace = true;
-        return { named, defaultImport, namespace };
-    }
-
-    const braceMatch = clause.match(/\{([^}]*)\}/);
-    if (braceMatch) {
-        for (const part of braceMatch[1].split(',')) {
-            const trimmed = part.trim();
-            if (!trimmed) {
-                continue;
-            }
-            const alias = trimmed.split(/\s+as\s+/);
-            named.add((alias[1] ?? alias[0]).trim());
-        }
-        clause = clause.replace(/\{[^}]*\}/, '').trim();
-    }
-
-    if (clause && !/^type\s/.test(clause)) {
-        defaultImport = true;
-    }
-
-    return { named, defaultImport, namespace };
-};
-
 const NODE_BUILTINS = new Set([
     'assert',
     'buffer',
@@ -432,6 +110,21 @@ const NODE_BUILTINS = new Set([
 const isNodeBuiltin = (specifier: string): boolean => {
     const base = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
     return NODE_BUILTINS.has(base);
+};
+
+export const resolveFilePath = (fromDir: string, specifier: string): string | null => {
+    const base = path.resolve(fromDir, specifier);
+    for (const ext of RESOLVE_EXTENSIONS) {
+        const candidate = normalizePath(base + ext);
+        try {
+            if (fs.statSync(candidate).isFile()) {
+                return candidate;
+            }
+        } catch {
+            // file doesn't exist or isn't accessible
+        }
+    }
+    return null;
 };
 
 export const resolveImport = (
@@ -495,18 +188,31 @@ export const resolveImport = (
     };
 };
 
-const resolveFilePath = (fromDir: string, specifier: string): string | null => {
-    const base = path.resolve(fromDir, specifier);
-    for (const ext of RESOLVE_EXTENSIONS) {
-        const candidate = normalizePath(base + ext);
-        try {
-            if (fs.statSync(candidate).isFile()) {
+export const findNearestTsConfig = (filePath: string, workspaceRoot: string): string | null => {
+    const configNames = ['tsconfig.json', 'jsconfig.json', 'tsconfig.app.json'];
+    let dir = path.dirname(filePath);
+    const root = path.resolve(workspaceRoot);
+
+    while (dir.startsWith(root)) {
+        for (const name of configNames) {
+            const candidate = path.join(dir, name);
+            if (fs.existsSync(candidate)) {
                 return candidate;
             }
-        } catch {
-            // file doesn't exist or isn't accessible
+        }
+        if (dir === root) {
+            break;
+        }
+        dir = path.dirname(dir);
+    }
+
+    for (const name of configNames) {
+        const candidate = path.join(root, name);
+        if (fs.existsSync(candidate)) {
+            return candidate;
         }
     }
+
     return null;
 };
 
@@ -558,30 +264,367 @@ export const loadTsConfigForFile = (filePath: string, workspaceRoot: string): Ts
     }
 };
 
-const findNearestTsConfig = (filePath: string, workspaceRoot: string): string | null => {
-    const configNames = ['tsconfig.json', 'jsconfig.json', 'tsconfig.app.json'];
-    let dir = path.dirname(filePath);
-    const root = path.resolve(workspaceRoot);
+export const findReachableFiles = (index: ImportIndex, seeds: Set<string>): Set<string> => {
+    const reachable = new Set<string>();
+    const queue = [...seeds];
 
-    while (dir.startsWith(root)) {
-        for (const name of configNames) {
-            const candidate = path.join(dir, name);
-            if (fs.existsSync(candidate)) {
-                return candidate;
+    while (queue.length > 0) {
+        const current = queue.pop();
+        if (!current || reachable.has(current)) {
+            continue;
+        }
+        reachable.add(current);
+        for (const dep of index.getDependencies(current)) {
+            if (!reachable.has(dep)) {
+                queue.push(dep);
             }
         }
-        if (dir === root) {
-            break;
-        }
-        dir = path.dirname(dir);
     }
 
-    for (const name of configNames) {
-        const candidate = path.join(root, name);
-        if (fs.existsSync(candidate)) {
-            return candidate;
-        }
-    }
-
-    return null;
+    return reachable;
 };
+
+export const buildImportIndex = async (
+    workspaceFolder: vscode.WorkspaceFolder,
+    entryGlobs: string[],
+    excludeGlobs: string[],
+): Promise<ImportIndex> => {
+    return ImportGraphBuilder.build(workspaceFolder, entryGlobs, excludeGlobs);
+};
+
+export class ImportGraphBuilder {
+    private readonly workspaceRoot: string;
+    private readonly getContent: (absPath: string) => string;
+    private javaTypeIndex: JavaTypeIndex = {
+        classToFile: new Map(),
+        packageToFiles: new Map(),
+        fileToPackage: new Map(),
+        fileToSimpleName: new Map(),
+    };
+    private tsConfigCache = new Map<string, TsConfigContext>();
+    private readonly dependencies = new Map<string, Set<string>>();
+    private readonly importers = new Map<string, Set<string>>();
+    private readonly importsByFile = new Map<string, ParsedImport[]>();
+    private entryPoints = new Set<string>();
+    private files: string[] = [];
+
+    private constructor(workspaceRoot: string) {
+        this.workspaceRoot = workspaceRoot;
+        this.getContent = createContentCache();
+    }
+
+    static async build(
+        workspaceFolder: vscode.WorkspaceFolder,
+        entryGlobs: string[],
+        excludeGlobs: string[],
+    ): Promise<ImportIndex> {
+        const workspaceRoot = workspaceFolder.uri.fsPath;
+        const cached = getCachedImportIndex(workspaceRoot);
+        if (cached) {
+            return cached;
+        }
+
+        const builder = new ImportGraphBuilder(workspaceRoot);
+        await builder.scan(workspaceFolder, entryGlobs, excludeGlobs);
+        return builder.toIndex();
+    }
+
+    getDependencies(absPath: string): string[] {
+        return [...(this.dependencies.get(absPath) ?? [])];
+    }
+
+    getImporters(absPath: string): string[] {
+        return [...(this.importers.get(absPath) ?? [])];
+    }
+
+    getImports(absPath: string): ParsedImport[] {
+        return this.importsByFile.get(absPath) ?? [];
+    }
+
+    resolve(fromFile: string, specifier: string): string | 'external' | null {
+        const resolved = resolveImport(fromFile, specifier, this.workspaceRoot, this.getTsConfig(fromFile));
+        if (!resolved) {
+            return null;
+        }
+        if (resolved.type === 'internal') {
+            return resolved.fsPath;
+        }
+        if (resolved.type === 'external') {
+            return 'external';
+        }
+        return null;
+    }
+
+    relativePath(absPath: string): string {
+        return toRelativePath(absPath, this.workspaceRoot);
+    }
+
+    private async scan(
+        workspaceFolder: vscode.WorkspaceFolder,
+        entryGlobs: string[],
+        excludeGlobs: string[],
+    ): Promise<void> {
+        const uris = await vscode.workspace.findFiles(
+            new vscode.RelativePattern(workspaceFolder, ANALYZE_SOURCE_GLOB),
+            EXCLUDE_GLOB,
+        );
+
+        const excluded = new Set<string>();
+        for (const pattern of excludeGlobs) {
+            const matches = await vscode.workspace.findFiles(
+                new vscode.RelativePattern(workspaceFolder, pattern),
+                EXCLUDE_GLOB,
+            );
+            for (const uri of matches) {
+                excluded.add(normalizePath(uri.fsPath));
+            }
+        }
+
+        const gitRoot = findGitRoot(this.workspaceRoot) ?? this.workspaceRoot;
+
+        this.files = filterGitIgnoredPaths(
+            gitRoot,
+            uris.map((uri) => normalizePath(uri.fsPath)).filter((filePath) => !excluded.has(filePath)),
+        );
+
+        const javaFiles = this.files.filter((filePath) => getSourceLanguage(filePath) === 'java');
+        this.javaTypeIndex = buildJavaTypeIndex(javaFiles, this.getContent);
+
+        this.entryPoints = await this.findEntryPoints(workspaceFolder, entryGlobs);
+        for (const filePath of filterGitIgnoredPaths(
+            gitRoot,
+            discoverJavaEntryPoints(this.workspaceRoot, javaFiles, this.javaTypeIndex, this.getContent),
+        )) {
+            this.entryPoints.add(filePath);
+        }
+        for (const filePath of filterGitIgnoredPaths(
+            gitRoot,
+            discoverPythonEntryPoints(this.workspaceRoot),
+        )) {
+            this.entryPoints.add(normalizePath(filePath));
+        }
+        for (const filePath of this.files) {
+            if (
+                /(^|\/)(vite|webpack|jest|eslint|prettier|tailwind|postcss|next)\.config\.(t|j)sx?$/i.test(
+                    filePath,
+                )
+            ) {
+                this.entryPoints.add(filePath);
+            }
+        }
+
+        for (const entry of [...this.entryPoints]) {
+            if (isReexportOnlyBarrel(this.getContent(entry), entry)) {
+                this.entryPoints.delete(entry);
+            }
+        }
+
+        for (const filePath of this.files) {
+            const parsed = this.parseDetailedImports(filePath);
+            this.importsByFile.set(filePath, parsed);
+
+            const deps = new Set<string>();
+            for (const item of parsed) {
+                if (!item.resolvedPath) {
+                    continue;
+                }
+                deps.add(item.resolvedPath);
+                const rev = this.importers.get(item.resolvedPath) ?? new Set<string>();
+                rev.add(filePath);
+                this.importers.set(item.resolvedPath, rev);
+            }
+            this.dependencies.set(filePath, deps);
+        }
+    }
+
+    private toIndex(): ImportIndex {
+        const result: ImportIndex = {
+            workspaceRoot: this.workspaceRoot,
+            files: this.files,
+            entryPoints: this.entryPoints,
+            relativePath: (absPath) => this.relativePath(absPath),
+            getContent: this.getContent,
+            getDependencies: (absPath) => this.getDependencies(absPath),
+            getImporters: (absPath) => this.getImporters(absPath),
+            getImports: (absPath) => this.getImports(absPath),
+            resolve: (fromFile, specifier) => this.resolve(fromFile, specifier),
+            javaTypeIndex: this.javaTypeIndex,
+        };
+
+        setCachedImportIndex(this.workspaceRoot, result);
+        return result;
+    }
+
+    private async findEntryPoints(
+        workspaceFolder: vscode.WorkspaceFolder,
+        entryGlobs: string[],
+    ): Promise<Set<string>> {
+        const entries = new Set<string>();
+
+        for (const pattern of entryGlobs) {
+            const matches = await vscode.workspace.findFiles(
+                new vscode.RelativePattern(workspaceFolder, pattern),
+                EXCLUDE_GLOB,
+            );
+            for (const uri of matches) {
+                entries.add(normalizePath(uri.fsPath));
+            }
+        }
+
+        const packageJsonPath = path.join(this.workspaceRoot, 'package.json');
+        if (fs.existsSync(packageJsonPath)) {
+            try {
+                const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
+                    main?: string;
+                    module?: string;
+                };
+                for (const field of [pkg.main, pkg.module]) {
+                    if (!field) {
+                        continue;
+                    }
+                    const resolved = resolveFilePath(this.workspaceRoot, field.replace(/^\.\//, ''));
+                    if (resolved) {
+                        entries.add(resolved);
+                    }
+                }
+            } catch {
+                // ignore invalid package.json
+            }
+        }
+
+        const gitRoot = findGitRoot(this.workspaceRoot) ?? this.workspaceRoot;
+        return new Set(filterGitIgnoredPaths(gitRoot, [...entries]));
+    }
+
+    private parseDetailedImports(filePath: string): ParsedImport[] {
+        const language = getSourceLanguage(filePath);
+
+        if (language === 'python') {
+            return parsePythonImports(this.getContent(filePath), filePath, this.workspaceRoot).map(
+                (resolvedPath) => ({
+                    specifier: resolvedPath,
+                    resolvedPath,
+                    named: new Set<string>(),
+                    defaultImport: false,
+                    namespace: false,
+                    sideEffect: true,
+                }),
+            );
+        }
+
+        if (language === 'java') {
+            return parseJavaImports(this.getContent(filePath), filePath, this.javaTypeIndex).map(
+                (resolvedPath) => ({
+                    specifier: resolvedPath,
+                    resolvedPath,
+                    named: new Set<string>(),
+                    defaultImport: false,
+                    namespace: false,
+                    sideEffect: true,
+                }),
+            );
+        }
+
+        const content = this.getContent(filePath);
+        const source = filePath.endsWith('.vue') ? extractVueScript(content) : content;
+        const results: ParsedImport[] = [];
+        const seen = new Set<string>();
+
+        const add = (specifier: string, clause: string, sideEffect = false) => {
+            const key = `${specifier}::${clause}::${sideEffect}`;
+            if (seen.has(key)) {
+                return;
+            }
+            seen.add(key);
+
+            const resolved = this.resolve(filePath, specifier);
+            const parsed = ImportGraphBuilder.parseImportClause(clause);
+            results.push({
+                specifier,
+                resolvedPath: resolved === 'external' ? null : resolved,
+                named: parsed.named,
+                defaultImport: parsed.defaultImport,
+                namespace: parsed.namespace,
+                sideEffect,
+            });
+        };
+
+        for (const regex of [IMPORT_FROM_RE, EXPORT_FROM_RE]) {
+            regex.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            while ((match = regex.exec(source)) !== null) {
+                add(match[3], match[2].trim(), false);
+            }
+        }
+
+        SIDE_EFFECT_IMPORT_RE.lastIndex = 0;
+        let sideMatch: RegExpExecArray | null;
+        while ((sideMatch = SIDE_EFFECT_IMPORT_RE.exec(source)) !== null) {
+            if (/from\s+['"]/.test(sideMatch[0])) {
+                continue;
+            }
+            add(sideMatch[1], '', true);
+        }
+
+        for (const regex of [REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
+            regex.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            while ((match = regex.exec(source)) !== null) {
+                add(match[1], '', true);
+            }
+        }
+
+        return results;
+    }
+
+    private static parseImportClause(
+        clause: string,
+    ): {
+        named: Set<string>;
+        defaultImport: boolean;
+        namespace: boolean;
+    } {
+        const named = new Set<string>();
+        let defaultImport = false;
+        let namespace = false;
+
+        if (!clause) {
+            return { named, defaultImport, namespace };
+        }
+
+        if (/^\*\s+as\s+\w+/.test(clause)) {
+            namespace = true;
+            return { named, defaultImport, namespace };
+        }
+
+        const braceMatch = clause.match(/\{([^}]*)\}/);
+        if (braceMatch) {
+            for (const part of braceMatch[1].split(',')) {
+                const trimmed = part.trim();
+                if (!trimmed) {
+                    continue;
+                }
+                const alias = trimmed.split(/\s+as\s+/);
+                named.add((alias[1] ?? alias[0]).trim());
+            }
+            clause = clause.replace(/\{[^}]*\}/, '').trim();
+        }
+
+        if (clause && !/^type\s/.test(clause)) {
+            defaultImport = true;
+        }
+
+        return { named, defaultImport, namespace };
+    }
+
+    private getTsConfig(fromFile: string): TsConfigContext {
+        const dir = path.dirname(fromFile);
+        const cached = this.tsConfigCache.get(dir);
+        if (cached) {
+            return cached;
+        }
+        const ctx = loadTsConfigForFile(fromFile, this.workspaceRoot);
+        this.tsConfigCache.set(dir, ctx);
+        return ctx;
+    }
+}

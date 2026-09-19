@@ -2,12 +2,10 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { isPathInsideFolder, normalizePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
-import { buildImportIndex } from '../../shared/javascript/importGraph';
+import { ImportGraphBuilder } from '../../shared/javascript/importGraph';
 import { discoverBundlerEntries } from './dead-explorer/entryDiscovery';
 import {
-    findOrphanModules,
-    findUnusedExports,
-    findUnusedFiles,
+    DeadCodeAnalyzer,
     getAnalyzeConfig,
     getDeadCodeExplorerConfig,
 } from './deadCode';
@@ -106,7 +104,7 @@ export const analyzeCodeInFolder = async (
                     : { entries: [] as string[], labels: new Map<string, string>() };
 
                 progress.report({ message: 'Building import graph…' });
-                const index = await buildImportIndex(
+                const index = await ImportGraphBuilder.build(
                     workspaceFolder,
                     entryGlobs,
                     config.excludeGlobs,
@@ -124,9 +122,10 @@ export const analyzeCodeInFolder = async (
                 );
 
                 progress.report({ message: 'Finding unused code…' });
-                const unusedFiles = findUnusedFiles(scopedFiles, index);
-                const orphanModules = findOrphanModules(scopedFiles, index);
-                const unusedExports = findUnusedExports(scopedFiles, index);
+                const analyzer = new DeadCodeAnalyzer(index);
+                const unusedFiles = analyzer.findUnusedFiles(scopedFiles);
+                const orphanModules = analyzer.findOrphanModules(scopedFiles);
+                const unusedExports = analyzer.findUnusedExports(scopedFiles);
 
                 progress.report({ message: 'Detecting duplicate code…' });
 

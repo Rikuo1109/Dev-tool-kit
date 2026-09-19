@@ -68,7 +68,7 @@ const resolveFromConfig = (
         resolveExisting(configDir, cleaned, existsFn) ??
         resolveExisting(workspaceRoot, cleaned, existsFn)
     );
-}
+};
 
 const resolveExisting = (
     root: string,

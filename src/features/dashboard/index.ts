@@ -6,7 +6,7 @@ import { filterGitIgnoredPaths, findGitRoot, isGitRepository } from '../../share
 import { isDarkTheme } from '../../shared/html';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { getDashboardHtml, parseClocData } from './cloc';
-import { getAggregatedGitChangeStats } from './gitChanges';
+import { GitChangeAnalyzer } from './gitChanges';
 import { rankTodos, scanTodosInContent, TodoItem } from './todos';
 
 interface FolderScanResult {
@@ -227,7 +227,9 @@ export const openDashboard = async (folder: string, extensionUri: vscode.Uri): P
                 },
                 async () => {
                     const scan = countFilesInDir(folder);
-                    const { stats: gitChanges, subrepoCount } = getAggregatedGitChangeStats(folder);
+                    const { stats: gitChanges, subrepoCount } = new GitChangeAnalyzer(
+                        folder,
+                    ).getAggregatedGitChangeStats();
                     const data = parseClocData(
                         scan.raw,
                         folder,

@@ -6,7 +6,7 @@ import {
     renderPanelHeader,
 } from '../../shared/panel';
 import { getPanelTheme } from '../../shared/theme';
-import { GitChangeStats, formatGitChartLabels } from './gitChanges';
+import { GitChangeAnalyzer, GitChangeStats } from './gitChanges';
 import { TodoItem } from './todos';
 
 interface ClocFileEntry {
@@ -877,7 +877,7 @@ export const getDashboardHtml = (
 
     const gitAvailable = ${JSON.stringify(git.available)};
     if (gitAvailable) {
-      const gitLabels = ${JSON.stringify(formatGitChartLabels(git.days))};
+      const gitLabels = ${JSON.stringify(GitChangeAnalyzer.formatGitChartLabels(git.days))};
       const gitAdded = ${JSON.stringify(git.days.map((d) => d.added))};
       const gitDeleted = ${JSON.stringify(git.days.map((d) => d.deleted))};
       const gitNet = ${JSON.stringify(git.days.map((d) => d.net))};

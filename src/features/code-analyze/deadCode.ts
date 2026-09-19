@@ -115,204 +115,6 @@ export const getDeadCodeExplorerConfig = (): DeadCodeExplorerConfig => {
     };
 };
 
-export const findUnusedFiles = (scopedFiles: string[], index: ImportIndex): AnalyzeFileItem[] => {
-    const items: AnalyzeFileItem[] = [];
-
-    for (const filePath of scopedFiles) {
-        if (index.entryPoints.has(filePath)) {
-            continue;
-        }
-        if (isActiveBarrel(filePath, index)) {
-            continue;
-        }
-        if (index.getImporters(filePath).length === 0) {
-            items.push({
-                relativePath: index.relativePath(filePath),
-                absolutePath: filePath,
-                detail: 'No imports found in workspace',
-            });
-        }
-    }
-
-    return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-};
-
-export const findOrphanModules = (scopedFiles: string[], index: ImportIndex): AnalyzeFileItem[] => {
-    const reachable = findReachableFiles(index, index.entryPoints);
-    const items: AnalyzeFileItem[] = [];
-
-    for (const filePath of scopedFiles) {
-        if (index.entryPoints.has(filePath) || reachable.has(filePath)) {
-            continue;
-        }
-        if (isActiveBarrel(filePath, index, reachable)) {
-            continue;
-        }
-        items.push({
-            relativePath: index.relativePath(filePath),
-            absolutePath: filePath,
-            detail: 'Not reachable from configured entry points',
-        });
-    }
-
-    return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-};
-
-const buildReexportMap = (
-    index: ImportIndex,
-): {
-    starMap: Map<string, Set<string>>;
-    namedMap: Map<string, Map<string, Set<string>>>;
-} => {
-    const starMap = new Map<string, Set<string>>();
-    const namedMap = new Map<string, Map<string, Set<string>>>();
-    const starRe = /export\s+\*\s+(?:as\s+\w+\s+)?from\s+['"]([^'"]+)['"]/g;
-    const namedRe = /export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
-    for (const filePath of index.files) {
-        const content = index.getContent(filePath);
-
-        starRe.lastIndex = 0;
-        let starMatch: RegExpExecArray | null;
-        while ((starMatch = starRe.exec(content)) !== null) {
-            const resolved = index.resolve(filePath, starMatch[1]);
-            if (!resolved || resolved === 'external') {
-                continue;
-            }
-            const set = starMap.get(resolved) ?? new Set<string>();
-            set.add(filePath);
-            starMap.set(resolved, set);
-        }
-
-        namedRe.lastIndex = 0;
-        let namedMatch: RegExpExecArray | null;
-        while ((namedMatch = namedRe.exec(content)) !== null) {
-            const resolved = index.resolve(filePath, namedMatch[2]);
-            if (!resolved || resolved === 'external') {
-                continue;
-            }
-            const barrelNames = namedMap.get(resolved) ?? new Map<string, Set<string>>();
-            for (const part of namedMatch[1].split(',')) {
-                const trimmed = part.trim();
-                if (!trimmed) {
-                    continue;
-                }
-                const alias = trimmed.split(/\s+as\s+/);
-                const exportedName = (alias[1] ?? alias[0]).trim();
-                const set = barrelNames.get(exportedName) ?? new Set<string>();
-                set.add(filePath);
-                barrelNames.set(exportedName, set);
-            }
-            namedMap.set(resolved, barrelNames);
-        }
-    }
-    return { starMap, namedMap };
-};
-
-const isReexportedViaAliveBarrel = (
-    modulePath: string,
-    index: ImportIndex,
-    reexports: {
-        starMap: Map<string, Set<string>>;
-        namedMap: Map<string, Map<string, Set<string>>>;
-    },
-    reachable: Set<string>,
-): boolean => {
-    const starBarrels = reexports.starMap.get(modulePath);
-    if (starBarrels && starBarrels.size > 0) {
-        for (const barrel of starBarrels) {
-            if (index.entryPoints.has(barrel) || reachable.has(barrel)) {
-                return true;
-            }
-            if (index.getImporters(barrel).length > 0) {
-                return true;
-            }
-        }
-    }
-
-    const namedBarrels = reexports.namedMap.get(modulePath);
-    if (namedBarrels && namedBarrels.size > 0) {
-        for (const [, barrelSet] of namedBarrels) {
-            for (const barrel of barrelSet) {
-                if (index.entryPoints.has(barrel) || reachable.has(barrel)) {
-                    return true;
-                }
-                if (index.getImporters(barrel).length > 0) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
-};
-export const findUnusedExports = (
-    scopedFiles: string[],
-    index: ImportIndex,
-): UnusedExportItem[] => {
-    const items: UnusedExportItem[] = [];
-
-    const reexports = buildReexportMap(index);
-    const reachable = findReachableFiles(index, index.entryPoints);
-
-    for (const filePath of scopedFiles) {
-        if (!isJavaScriptSource(filePath)) {
-            continue;
-        }
-        const content = index.getContent(filePath);
-        if (isReexportOnlyBarrel(content, filePath)) {
-            continue;
-        }
-
-        const starReexported = isReexportedViaAliveBarrel(filePath, index, reexports, reachable);
-
-        const exports = extractJavaScriptExports(content, filePath);
-        if (exports.length === 0) {
-            continue;
-        }
-        const usage = collectJavaScriptExportUsage(index, filePath);
-
-        for (const exp of exports) {
-            if (exp.isTypeOnly || usage.namespaceImports) {
-                continue;
-            }
-            if (exp.isDefault) {
-                if (!usage.defaultImport && !usage.named.has('default')) {
-                    items.push(toExportItem(index, filePath, exp));
-                }
-                continue;
-            }
-            if (starReexported) {
-                continue;
-            }
-            if (!usage.named.has(exp.name)) {
-                items.push(toExportItem(index, filePath, exp));
-            }
-        }
-    }
-
-    items.push(...findUnusedPythonExports(scopedFiles, index));
-    items.push(...findUnusedJavaExports(scopedFiles, index, index.javaTypeIndex));
-    return items.sort(
-        (a, b) =>
-            a.relativePath.localeCompare(b.relativePath) ||
-            a.exportName.localeCompare(b.exportName),
-    );
-};
-
-const toExportItem = (
-    index: ImportIndex,
-    filePath: string,
-    exp: ExtractedExport,
-): UnusedExportItem => {
-    return {
-        relativePath: index.relativePath(filePath),
-        absolutePath: filePath,
-        exportName: exp.isDefault ? 'default' : exp.name,
-        kind: exp.kind,
-        line: exp.line,
-    };
-};
-
 interface ExtractedExport {
     name: string;
     kind: string;
@@ -321,145 +123,341 @@ interface ExtractedExport {
     line?: number;
 }
 
-const extractJavaScriptExports = (content: string, filePath: string): ExtractedExport[] => {
-    const source = scriptContent(content, filePath);
-    const exports: ExtractedExport[] = [];
-    const seen = new Set<string>();
+export class DeadCodeAnalyzer {
+    private readonly index: ImportIndex;
 
-    const add = (item: ExtractedExport) => {
-        const key = `${item.isDefault ? 'default' : item.name}:${item.kind}`;
-        if (seen.has(key)) {
-            return;
+    constructor(index: ImportIndex) {
+        this.index = index;
+    }
+
+    findUnusedFiles(scopedFiles: string[]): AnalyzeFileItem[] {
+        const items: AnalyzeFileItem[] = [];
+
+        for (const filePath of scopedFiles) {
+            if (this.index.entryPoints.has(filePath)) {
+                continue;
+            }
+            if (isActiveBarrel(filePath, this.index)) {
+                continue;
+            }
+            if (this.index.getImporters(filePath).length === 0) {
+                items.push({
+                    relativePath: this.index.relativePath(filePath),
+                    absolutePath: filePath,
+                    detail: 'No imports found in workspace',
+                });
+            }
         }
-        seen.add(key);
-        exports.push(item);
-    };
 
-    const addMatch = (match: RegExpExecArray, item: Omit<ExtractedExport, 'line'>) => {
-        add({ ...item, line: lineAt(source, match.index) });
-    };
+        return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    }
 
-    const directPatterns: Array<[RegExp, string]> = [
-        [/export\s+async\s+function\s+(\w+)/g, 'function'],
-        [/export\s+function\s+(\w+)/g, 'function'],
-        [/export\s+class\s+(\w+)/g, 'class'],
-        [/export\s+enum\s+(\w+)/g, 'enum'],
-        [/export\s+const\s+(\w+)/g, 'const'],
-        [/export\s+let\s+(\w+)/g, 'let'],
-        [/export\s+var\s+(\w+)/g, 'var'],
-    ];
+    findOrphanModules(scopedFiles: string[]): AnalyzeFileItem[] {
+        const reachable = findReachableFiles(this.index, this.index.entryPoints);
+        const items: AnalyzeFileItem[] = [];
 
-    for (const [regex, kind] of directPatterns) {
-        regex.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = regex.exec(source)) !== null) {
-            addMatch(match, {
-                name: match[1],
-                kind,
-                isDefault: false,
+        for (const filePath of scopedFiles) {
+            if (this.index.entryPoints.has(filePath) || reachable.has(filePath)) {
+                continue;
+            }
+            if (isActiveBarrel(filePath, this.index, reachable)) {
+                continue;
+            }
+            items.push({
+                relativePath: this.index.relativePath(filePath),
+                absolutePath: filePath,
+                detail: 'Not reachable from configured entry points',
+            });
+        }
+
+        return items.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    }
+
+    findUnusedExports(scopedFiles: string[]): UnusedExportItem[] {
+        const items: UnusedExportItem[] = [];
+
+        const reexports = this.buildReexportMap();
+        const reachable = findReachableFiles(this.index, this.index.entryPoints);
+
+        for (const filePath of scopedFiles) {
+            if (!isJavaScriptSource(filePath)) {
+                continue;
+            }
+            const content = this.index.getContent(filePath);
+            if (isReexportOnlyBarrel(content, filePath)) {
+                continue;
+            }
+
+            const starReexported = this.isReexportedViaAliveBarrel(filePath, reexports, reachable);
+
+            const exports = DeadCodeAnalyzer.extractJavaScriptExports(content, filePath);
+            if (exports.length === 0) {
+                continue;
+            }
+            const usage = this.collectJavaScriptExportUsage(filePath);
+
+            for (const exp of exports) {
+                if (exp.isTypeOnly || usage.namespaceImports) {
+                    continue;
+                }
+                if (exp.isDefault) {
+                    if (!usage.defaultImport && !usage.named.has('default')) {
+                        items.push(this.toExportItem(filePath, exp));
+                    }
+                    continue;
+                }
+                if (starReexported) {
+                    continue;
+                }
+                if (!usage.named.has(exp.name)) {
+                    items.push(this.toExportItem(filePath, exp));
+                }
+            }
+        }
+
+        items.push(...findUnusedPythonExports(scopedFiles, this.index));
+        items.push(...findUnusedJavaExports(scopedFiles, this.index, this.index.javaTypeIndex));
+        return items.sort(
+            (a, b) =>
+                a.relativePath.localeCompare(b.relativePath) ||
+                a.exportName.localeCompare(b.exportName),
+        );
+    }
+
+    private toExportItem(filePath: string, exp: ExtractedExport): UnusedExportItem {
+        return {
+            relativePath: this.index.relativePath(filePath),
+            absolutePath: filePath,
+            exportName: exp.isDefault ? 'default' : exp.name,
+            kind: exp.kind,
+            line: exp.line,
+        };
+    }
+
+    private buildReexportMap(): {
+        starMap: Map<string, Set<string>>;
+        namedMap: Map<string, Map<string, Set<string>>>;
+    } {
+        const starMap = new Map<string, Set<string>>();
+        const namedMap = new Map<string, Map<string, Set<string>>>();
+        const starRe = /export\s+\*\s+(?:as\s+\w+\s+)?from\s+['"]([^'"]+)['"]/g;
+        const namedRe = /export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
+        for (const filePath of this.index.files) {
+            const content = this.index.getContent(filePath);
+
+            starRe.lastIndex = 0;
+            let starMatch: RegExpExecArray | null;
+            while ((starMatch = starRe.exec(content)) !== null) {
+                const resolved = this.index.resolve(filePath, starMatch[1]);
+                if (!resolved || resolved === 'external') {
+                    continue;
+                }
+                const set = starMap.get(resolved) ?? new Set<string>();
+                set.add(filePath);
+                starMap.set(resolved, set);
+            }
+
+            namedRe.lastIndex = 0;
+            let namedMatch: RegExpExecArray | null;
+            while ((namedMatch = namedRe.exec(content)) !== null) {
+                const resolved = this.index.resolve(filePath, namedMatch[2]);
+                if (!resolved || resolved === 'external') {
+                    continue;
+                }
+                const barrelNames = namedMap.get(resolved) ?? new Map<string, Set<string>>();
+                for (const part of namedMatch[1].split(',')) {
+                    const trimmed = part.trim();
+                    if (!trimmed) {
+                        continue;
+                    }
+                    const alias = trimmed.split(/\s+as\s+/);
+                    const exportedName = (alias[1] ?? alias[0]).trim();
+                    const set = barrelNames.get(exportedName) ?? new Set<string>();
+                    set.add(filePath);
+                    barrelNames.set(exportedName, set);
+                }
+                namedMap.set(resolved, barrelNames);
+            }
+        }
+        return { starMap, namedMap };
+    }
+
+    private isReexportedViaAliveBarrel(
+        modulePath: string,
+        reexports: {
+            starMap: Map<string, Set<string>>;
+            namedMap: Map<string, Map<string, Set<string>>>;
+        },
+        reachable: Set<string>,
+    ): boolean {
+        const starBarrels = reexports.starMap.get(modulePath);
+        if (starBarrels && starBarrels.size > 0) {
+            for (const barrel of starBarrels) {
+                if (this.index.entryPoints.has(barrel) || reachable.has(barrel)) {
+                    return true;
+                }
+                if (this.index.getImporters(barrel).length > 0) {
+                    return true;
+                }
+            }
+        }
+
+        const namedBarrels = reexports.namedMap.get(modulePath);
+        if (namedBarrels && namedBarrels.size > 0) {
+            for (const [, barrelSet] of namedBarrels) {
+                for (const barrel of barrelSet) {
+                    if (this.index.entryPoints.has(barrel) || reachable.has(barrel)) {
+                        return true;
+                    }
+                    if (this.index.getImporters(barrel).length > 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static extractJavaScriptExports(content: string, filePath: string): ExtractedExport[] {
+        const source = scriptContent(content, filePath);
+        const exports: ExtractedExport[] = [];
+        const seen = new Set<string>();
+
+        const add = (item: ExtractedExport) => {
+            const key = `${item.isDefault ? 'default' : item.name}:${item.kind}`;
+            if (seen.has(key)) {
+                return;
+            }
+            seen.add(key);
+            exports.push(item);
+        };
+
+        const addMatch = (match: RegExpExecArray, item: Omit<ExtractedExport, 'line'>) => {
+            add({ ...item, line: lineAt(source, match.index) });
+        };
+
+        const directPatterns: Array<[RegExp, string]> = [
+            [/export\s+async\s+function\s+(\w+)/g, 'function'],
+            [/export\s+function\s+(\w+)/g, 'function'],
+            [/export\s+class\s+(\w+)/g, 'class'],
+            [/export\s+enum\s+(\w+)/g, 'enum'],
+            [/export\s+const\s+(\w+)/g, 'const'],
+            [/export\s+let\s+(\w+)/g, 'let'],
+            [/export\s+var\s+(\w+)/g, 'var'],
+        ];
+
+        for (const [regex, kind] of directPatterns) {
+            regex.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            while ((match = regex.exec(source)) !== null) {
+                addMatch(match, {
+                    name: match[1],
+                    kind,
+                    isDefault: false,
+                    isTypeOnly: false,
+                });
+            }
+        }
+
+        const typePatterns: Array<[RegExp, string]> = [
+            [/export\s+type\s+(\w+)/g, 'type'],
+            [/export\s+interface\s+(\w+)/g, 'interface'],
+        ];
+        for (const [regex, kind] of typePatterns) {
+            regex.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            while ((match = regex.exec(source)) !== null) {
+                addMatch(match, {
+                    name: match[1],
+                    kind,
+                    isDefault: false,
+                    isTypeOnly: true,
+                });
+            }
+        }
+
+        const defaultMatch = /export\s+default/m.exec(source);
+        if (defaultMatch) {
+            add({
+                name: 'default',
+                kind: 'default',
+                isDefault: true,
                 isTypeOnly: false,
+                line: lineAt(source, defaultMatch.index),
             });
         }
-    }
 
-    const typePatterns: Array<[RegExp, string]> = [
-        [/export\s+type\s+(\w+)/g, 'type'],
-        [/export\s+interface\s+(\w+)/g, 'interface'],
-    ];
-    for (const [regex, kind] of typePatterns) {
-        regex.lastIndex = 0;
-        let match: RegExpExecArray | null;
-        while ((match = regex.exec(source)) !== null) {
-            addMatch(match, {
-                name: match[1],
-                kind,
-                isDefault: false,
-                isTypeOnly: true,
-            });
-        }
-    }
-
-    const defaultMatch = /export\s+default/m.exec(source);
-    if (defaultMatch) {
-        add({
-            name: 'default',
-            kind: 'default',
-            isDefault: true,
-            isTypeOnly: false,
-            line: lineAt(source, defaultMatch.index),
-        });
-    }
-
-    const exportListRe = /export\s+\{([^}]+)\}/g;
-    let listMatch: RegExpExecArray | null;
-    while ((listMatch = exportListRe.exec(source)) !== null) {
-        if (/from\s+['"]/.test(listMatch[0])) {
-            continue;
-        }
-        for (const part of listMatch[1].split(',')) {
-            const trimmed = part.trim();
-            if (!trimmed) {
+        const exportListRe = /export\s+\{([^}]+)\}/g;
+        let listMatch: RegExpExecArray | null;
+        while ((listMatch = exportListRe.exec(source)) !== null) {
+            if (/from\s+['"]/.test(listMatch[0])) {
                 continue;
             }
-            const alias = trimmed.split(/\s+as\s+/);
-            addMatch(listMatch, {
-                name: (alias[1] ?? alias[0]).trim(),
-                kind: 'named',
-                isDefault: false,
-                isTypeOnly: false,
-            });
-        }
-    }
-
-    return exports;
-};
-
-const collectJavaScriptExportUsage = (
-    index: ImportIndex,
-    modulePath: string,
-): {
-    named: Set<string>;
-    defaultImport: boolean;
-    namespaceImports: boolean;
-} => {
-    const named = new Set<string>();
-    let defaultImport = false;
-    let namespaceImports = false;
-
-    for (const filePath of index.files) {
-        for (const imp of index.getImports(filePath)) {
-            if (imp.resolvedPath !== modulePath) {
-                continue;
-            }
-            if (imp.namespace) {
-                namespaceImports = true;
-            }
-            if (imp.defaultImport) {
-                defaultImport = true;
-            }
-            for (const name of imp.named) {
-                named.add(name);
-            }
-        }
-
-        const content = index.getContent(filePath);
-        const reexportRe = /export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
-        let match: RegExpExecArray | null;
-        while ((match = reexportRe.exec(content)) !== null) {
-            const resolved = index.resolve(filePath, match[2]);
-            if (resolved !== modulePath) {
-                continue;
-            }
-            for (const part of match[1].split(',')) {
+            for (const part of listMatch[1].split(',')) {
                 const trimmed = part.trim();
                 if (!trimmed) {
                     continue;
                 }
                 const alias = trimmed.split(/\s+as\s+/);
-                named.add((alias[0] ?? alias[1]).trim());
+                addMatch(listMatch, {
+                    name: (alias[1] ?? alias[0]).trim(),
+                    kind: 'named',
+                    isDefault: false,
+                    isTypeOnly: false,
+                });
             }
         }
+
+        return exports;
     }
 
-    return { named, defaultImport, namespaceImports };
-};
+    private collectJavaScriptExportUsage(
+        modulePath: string,
+    ): {
+        named: Set<string>;
+        defaultImport: boolean;
+        namespaceImports: boolean;
+    } {
+        const named = new Set<string>();
+        let defaultImport = false;
+        let namespaceImports = false;
+
+        for (const filePath of this.index.files) {
+            for (const imp of this.index.getImports(filePath)) {
+                if (imp.resolvedPath !== modulePath) {
+                    continue;
+                }
+                if (imp.namespace) {
+                    namespaceImports = true;
+                }
+                if (imp.defaultImport) {
+                    defaultImport = true;
+                }
+                for (const name of imp.named) {
+                    named.add(name);
+                }
+            }
+
+            const content = this.index.getContent(filePath);
+            const reexportRe = /export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
+            let match: RegExpExecArray | null;
+            while ((match = reexportRe.exec(content)) !== null) {
+                const resolved = this.index.resolve(filePath, match[2]);
+                if (resolved !== modulePath) {
+                    continue;
+                }
+                for (const part of match[1].split(',')) {
+                    const trimmed = part.trim();
+                    if (!trimmed) {
+                        continue;
+                    }
+                    const alias = trimmed.split(/\s+as\s+/);
+                    named.add((alias[0] ?? alias[1]).trim());
+                }
+            }
+        }
+
+        return { named, defaultImport, namespaceImports };
+    }
+}
