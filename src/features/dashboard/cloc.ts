@@ -7,7 +7,6 @@ import {
 } from '../../shared/panel';
 import { getPanelTheme } from '../../shared/theme';
 import { GitChangeAnalyzer, GitChangeStats } from './gitChanges';
-import { TodoItem } from './todos';
 
 interface ClocFileEntry {
     blank: number;
@@ -16,22 +15,12 @@ interface ClocFileEntry {
     language: string;
 }
 
-export interface FileStat {
-    relativePath: string;
-    absolutePath: string;
-    code: number;
-    blank: number;
-    comment: number;
-}
-
 export interface LangStat {
     name: string;
     nFiles: number;
     code: number;
     blank: number;
     comment: number;
-    topFiles: FileStat[];
-    smallestFiles: FileStat[];
 }
 
 export interface DashboardData {
@@ -43,11 +32,7 @@ export interface DashboardData {
     languages: LangStat[];
     gitChanges: GitChangeStats;
     subrepoCount: number;
-    todos: TodoItem[];
-    todoTotal: number;
 }
-
-const TOP_FILES_PER_LANG = 5;
 
 const LANG_COLORS = [
     '#6366f1',
@@ -64,15 +49,15 @@ const LANG_COLORS = [
 
 export const parseClocData = (
     raw: Record<string, unknown>,
-    folder: string,
+    _folder: string,
     folderName: string,
     gitChanges: GitChangeStats,
     subrepoCount = 0,
-    todos: TodoItem[] = [],
-    todoTotal = 0,
 ): DashboardData => {
-    const normalizedFolder = folder.replace(/\\/g, '/').replace(/\/$/, '');
-    const filesByLang = new Map<string, FileStat[]>();
+    const filesByLang = new Map<
+        string,
+        { nFiles: number; code: number; blank: number; comment: number }
+    >();
 
     for (const [key, value] of Object.entries(raw)) {
         if (key === 'header' || key === 'SUM') {
@@ -80,38 +65,21 @@ export const parseClocData = (
         }
 
         const entry = value as ClocFileEntry;
-        const relativePath = key
-            .replace(/\\/g, '/')
-            .replace(`${normalizedFolder}/`, '')
-            .replace(`${normalizedFolder}`, '');
-
-        const file: FileStat = {
-            relativePath: relativePath || (key.split(/[/\\]/).pop() ?? key),
-            absolutePath: key.replace(/\\/g, '/'),
-            code: entry.code,
-            blank: entry.blank,
-            comment: entry.comment,
+        const agg = filesByLang.get(entry.language) ?? {
+            nFiles: 0,
+            code: 0,
+            blank: 0,
+            comment: 0,
         };
-
-        const list = filesByLang.get(entry.language) ?? [];
-        list.push(file);
-        filesByLang.set(entry.language, list);
+        agg.nFiles += 1;
+        agg.code += entry.code;
+        agg.blank += entry.blank;
+        agg.comment += entry.comment;
+        filesByLang.set(entry.language, agg);
     }
 
     const languages: LangStat[] = [...filesByLang.entries()]
-        .map(([name, files]) => {
-            const sortedDesc = [...files].sort((a, b) => b.code - a.code);
-            const sortedAsc = [...files].sort((a, b) => a.code - b.code);
-            return {
-                name,
-                nFiles: files.length,
-                code: files.reduce((sum, f) => sum + f.code, 0),
-                blank: files.reduce((sum, f) => sum + f.blank, 0),
-                comment: files.reduce((sum, f) => sum + f.comment, 0),
-                topFiles: sortedDesc.slice(0, TOP_FILES_PER_LANG),
-                smallestFiles: sortedAsc.slice(0, TOP_FILES_PER_LANG),
-            };
-        })
+        .map(([name, agg]) => ({ name, ...agg }))
         .sort((a, b) => b.code - a.code);
 
     const sum = raw.SUM as {
@@ -130,8 +98,6 @@ export const parseClocData = (
         languages,
         gitChanges,
         subrepoCount,
-        todos,
-        todoTotal,
     };
 };
 
@@ -149,79 +115,6 @@ export const getDashboardHtml = (
 
     const chartColors = data.languages.map((_, i) => LANG_COLORS[i % LANG_COLORS.length]);
 
-    const langCards = data.languages
-        .map((lang, i) => {
-            const pct = data.totalCode > 0 ? ((lang.code / data.totalCode) * 100).toFixed(1) : '0';
-            const color = chartColors[i];
-
-            const fileRows = (files: FileStat[]) =>
-                files
-                    .map(
-                        (file, rank) => `
-          <tr>
-            <td class="rank">${rank + 1}</td>
-            <td class="file-path">
-              <button type="button" class="file-link" data-path="${escapeHtml(file.absolutePath)}" title="${escapeHtml(file.relativePath)}">${escapeHtml(file.relativePath)}</button>
-            </td>
-            <td class="num col-code">${file.code.toLocaleString()}</td>
-            <td class="num col-other muted">${(file.blank + file.comment).toLocaleString()}</td>
-          </tr>`,
-                    )
-                    .join('');
-
-            const renderTable = (files: FileStat[], title: string) =>
-                files.length > 0
-                    ? `
-          <div class="file-table-block">
-            <h4 class="file-table-title">${title}</h4>
-            <table class="top-files">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>File</th>
-                  <th class="col-code">Code</th>
-                  <th class="col-other">Other</th>
-                </tr>
-              </thead>
-              <tbody>${fileRows(files)}</tbody>
-            </table>
-          </div>`
-                    : '';
-
-            const fileTables =
-                lang.topFiles.length > 0 || lang.smallestFiles.length > 0
-                    ? `
-          <div class="file-tables">
-            ${renderTable(lang.topFiles, 'Top 5 largest')}
-            ${renderTable(lang.smallestFiles, 'Top 5 smallest')}
-          </div>`
-                    : '';
-
-            return `
-        <section class="lang-card" style="--lang-color: ${color}">
-          <header class="lang-header">
-            <div class="lang-title">
-              <span class="lang-dot"></span>
-              <h3>${escapeHtml(lang.name)}</h3>
-            </div>
-            <div class="lang-meta">
-              <span>${lang.nFiles} files</span>
-              <span class="lang-pct">${pct}%</span>
-            </div>
-          </header>
-          <div class="lang-bar-wrap">
-            <div class="lang-bar" style="width: ${pct}%"></div>
-          </div>
-          <div class="lang-stats">
-            <span><strong>${lang.code.toLocaleString()}</strong> code</span>
-            <span>${lang.blank.toLocaleString()} blank</span>
-            <span>${lang.comment.toLocaleString()} comment</span>
-          </div>
-          ${fileTables}
-        </section>`;
-        })
-        .join('');
-
     const git = data.gitChanges;
     const netClass = (net: number) =>
         net > 0 ? 'net-positive' : net < 0 ? 'net-negative' : 'net-zero';
@@ -234,51 +127,6 @@ export const getDashboardHtml = (
         <div class="value">${data.subrepoCount}</div>
       </div>`
             : '';
-
-    const todoCard = `<div class="stat-card">
-      <div class="label">TODOs</div>
-      <div class="value">${data.todoTotal.toLocaleString()}</div>
-    </div>`;
-
-    const todoSection =
-        data.todos.length > 0
-            ? `
-  <section class="section-block">
-    <div class="todo-card">
-      <h2 class="section-title">Open TODOs${
-          data.todoTotal > data.todos.length
-              ? ` <span class="todo-cap">(showing ${data.todos.length} of ${data.todoTotal})</span>`
-              : ''
-      }</h2>
-      <table class="top-files todo-files">
-        <thead>
-          <tr>
-            <th class="col-tag">Tag</th>
-            <th>File</th>
-            <th>Preview</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data.todos
-              .map(
-                  (todo) => `
-          <tr>
-            <td class="col-tag"><span class="todo-tag todo-tag-${todo.tag.toLowerCase()}">${todo.tag}</span></td>
-            <td class="file-path">
-              <button type="button" class="file-link" data-path="${escapeHtml(todo.absolutePath)}" data-line="${todo.line}" title="${escapeHtml(todo.relativePath)}:${todo.line}">${escapeHtml(todo.relativePath)}:${todo.line}</button>
-            </td>
-            <td class="todo-preview" title="${escapeHtml(todo.text)}">${escapeHtml(todo.text)}</td>
-          </tr>`,
-              )
-              .join('')}
-        </tbody>
-      </table>
-    </div>
-  </section>`
-            : `
-  <section class="section-block">
-    <div class="todo-empty">No TODO/FIXME comments found.</div>
-  </section>`;
 
     const uncommittedFiles = git.uncommittedFiles ?? [];
     const uncommittedTable =
@@ -429,64 +277,6 @@ export const getDashboardHtml = (
       margin-bottom: 10px;
     }
 
-    .todo-card {
-      background: ${theme.surface};
-      border: 1px solid ${theme.border};
-      border-radius: 10px;
-      padding: 10px 12px;
-      box-shadow: ${theme.shadow};
-    }
-
-    .todo-cap {
-      font-weight: 500;
-      text-transform: none;
-      letter-spacing: 0;
-      color: ${theme.muted};
-    }
-
-    .todo-tag {
-      display: inline-block;
-      font-size: 0.62rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      padding: 1px 5px;
-      border-radius: 4px;
-    }
-
-    .todo-tag-todo {
-      background: rgba(245, 158, 11, 0.18);
-      color: #f59e0b;
-    }
-
-    .todo-tag-fixme {
-      background: rgba(239, 68, 68, 0.18);
-      color: #ef4444;
-    }
-
-    .col-tag {
-      width: 56px;
-      white-space: nowrap;
-    }
-
-    .todo-preview {
-      max-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: ${theme.muted};
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 0.68rem;
-    }
-
-    .todo-empty {
-      background: ${theme.surface};
-      border: 1px dashed ${theme.border};
-      border-radius: 10px;
-      padding: 8px 10px;
-      color: ${theme.muted};
-      font-size: 0.72rem;
-    }
-
     .overview {
       display: grid;
       grid-template-columns: minmax(220px, 280px) 1fr;
@@ -563,103 +353,6 @@ export const getDashboardHtml = (
       font-weight: 600;
       font-size: 0.72rem;
       font-variant-numeric: tabular-nums;
-    }
-
-    .languages {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .lang-card {
-      background: ${theme.surface};
-      border: 1px solid ${theme.border};
-      border-radius: 10px;
-      padding: 10px 12px;
-      box-shadow: ${theme.shadow};
-    }
-
-    .lang-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-
-    .lang-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .lang-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--lang-color);
-      flex-shrink: 0;
-    }
-
-    .lang-title h3 {
-      font-size: 0.88rem;
-      font-weight: 600;
-    }
-
-    .lang-meta {
-      display: flex;
-      gap: 8px;
-      font-size: 0.72rem;
-      color: ${theme.muted};
-    }
-
-    .lang-pct {
-      font-weight: 700;
-      color: var(--lang-color);
-    }
-
-    .lang-bar-wrap {
-      height: 5px;
-      background: ${theme.barTrack};
-      border-radius: 99px;
-      overflow: hidden;
-      margin-bottom: 6px;
-    }
-
-    .lang-bar {
-      height: 100%;
-      background: var(--lang-color);
-      border-radius: 99px;
-      min-width: 2px;
-      transition: width 0.4s ease;
-    }
-
-    .lang-stats {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      font-size: 0.72rem;
-      color: ${theme.muted};
-      margin-bottom: 6px;
-    }
-
-    .lang-stats strong {
-      color: ${theme.text};
-    }
-
-    .file-tables {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 8px;
-    }
-
-    .file-table-title {
-      font-size: 0.62rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: ${theme.muted};
-      margin-bottom: 4px;
-      font-weight: 600;
     }
 
     .top-files {
@@ -777,13 +470,10 @@ export const getDashboardHtml = (
       <div class="label">Blank + comment</div>
       <div class="value">${(data.totalBlank + data.totalComment).toLocaleString()}</div>
     </div>
-    ${todoCard}
     ${subrepoCard}
   </div>
 
   ${gitSection}
-
-  ${todoSection}
 
   <div class="overview">
     <div class="chart-card">
@@ -810,9 +500,6 @@ export const getDashboardHtml = (
       </div>
     </div>
   </div>
-
-  <h2 class="section-title">Top files by language</h2>
-  <div class="languages">${langCards}</div>
 
   <script src="${escapeHtml(assets.chartScriptUri)}"></script>
   <script>

@@ -1,19 +1,12 @@
-import { readdirSync, statSync } from 'fs';
-import { extname, join, relative } from 'path';
+import { readdirSync } from 'fs';
+import { extname, join } from 'path';
 import * as vscode from 'vscode';
 import { readFileSafe } from '../../shared/fs';
-import { filterGitIgnoredPaths, findGitRoot, isGitRepository } from '../../shared/gitignore';
+import { listGitVisibleFiles } from '../../shared/gitignore';
 import { isDarkTheme } from '../../shared/html';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { getDashboardHtml, parseClocData } from './cloc';
 import { GitChangeAnalyzer } from './gitChanges';
-import { rankTodos, scanTodosInContent, TodoItem } from './todos';
-
-interface FolderScanResult {
-    raw: Record<string, unknown>;
-    todos: TodoItem[];
-    todoTotal: number;
-}
 
 let activePanel: vscode.WebviewPanel | undefined;
 
@@ -58,67 +51,44 @@ const countCodeLines = (
     return { code, blank, comment };
 };
 
-const countFilesInDir = (
-    dirPath: string,
-    excludeDirs = new Set(['node_modules', 'dist', 'build', '.git', '.gitnexus']),
-): FolderScanResult => {
-    const result: Record<string, unknown> = {};
-    const foundTodos: TodoItem[] = [];
-    let totalFiles = 0;
-    let totalCode = 0;
-    let totalBlank = 0;
-    let totalComment = 0;
-
-    const resolvedRoot = dirPath.replace(/\\/g, '/').replace(/\/$/, '');
-    const isGit = isGitRepository(dirPath);
-    const gitRoot = isGit ? findGitRoot(dirPath) : null;
-    const filesToCheck: string[] = [];
-    const compressedExts = new Set(['.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z', '.rar', '.xz']);
-
-    const walkDir = (dir: string) => {
+const walkUntrackedFiles = (dirPath: string, excludeDirs: Set<string>): string[] => {
+    const files: string[] = [];
+    const walk = (dir: string) => {
         try {
-            const pending: { fullPath: string; isDir: boolean }[] = [];
-            for (const entry of readdirSync(dir)) {
-                if (entry.startsWith('.') && !isGit) {
+            for (const entry of readdirSync(dir, { withFileTypes: true })) {
+                if (entry.name.startsWith('.') || excludeDirs.has(entry.name)) {
                     continue;
                 }
-                if (excludeDirs.has(entry)) {
-                    continue;
-                }
-
-                const fullPath = join(dir, entry);
-                try {
-                    pending.push({ fullPath, isDir: statSync(fullPath).isDirectory() });
-                } catch {
-                    // Skip unreadable entries
-                }
-            }
-
-            const checkPaths = pending.map((item) =>
-                item.isDir ? `${item.fullPath.replace(/\\/g, '/')}/` : item.fullPath,
-            );
-            const allowed = new Set(
-                gitRoot ? filterGitIgnoredPaths(gitRoot, checkPaths) : checkPaths,
-            );
-
-            for (let i = 0; i < pending.length; i++) {
-                if (!allowed.has(checkPaths[i])) {
-                    continue;
-                }
-                if (pending[i].isDir) {
-                    walkDir(pending[i].fullPath);
+                const fullPath = join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    walk(fullPath);
                 } else {
-                    filesToCheck.push(pending[i].fullPath);
+                    files.push(fullPath);
                 }
             }
         } catch {
             // Skip unreadable dirs
         }
     };
+    walk(dirPath);
+    return files;
+};
 
-    walkDir(dirPath);
+const countFilesInDir = (
+    dirPath: string,
+    excludeDirs = new Set(['node_modules', 'dist', 'build', '.git', '.gitnexus']),
+): Record<string, unknown> => {
+    const result: Record<string, unknown> = {};
+    let totalFiles = 0;
+    let totalCode = 0;
+    let totalBlank = 0;
+    let totalComment = 0;
 
-    const filesToProcess = filesToCheck;
+    const compressedExts = new Set(['.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z', '.rar', '.xz']);
+    const gitFiles = listGitVisibleFiles(dirPath);
+    const filesToProcess = gitFiles
+        ? gitFiles.filter((filePath) => !filePath.split(/[/\\]/).some((part) => excludeDirs.has(part)))
+        : walkUntrackedFiles(dirPath, excludeDirs);
 
     const langMap: Record<string, string> = {
         '.js': 'JavaScript',
@@ -153,10 +123,6 @@ const countFilesInDir = (
                 continue;
             }
             const counts = countCodeLines(content);
-            const relativePath =
-                relative(resolvedRoot, fullPath).replace(/\\/g, '/') ||
-                fullPath.split(/[/\\]/).pop() ||
-                fullPath;
 
             result[fullPath] = {
                 blank: counts.blank,
@@ -164,8 +130,6 @@ const countFilesInDir = (
                 code: counts.code,
                 language: lang,
             };
-
-            foundTodos.push(...scanTodosInContent(content, fullPath, relativePath));
 
             totalFiles++;
             totalCode += counts.code;
@@ -183,12 +147,7 @@ const countFilesInDir = (
         comment: totalComment,
     };
 
-    const ranked = rankTodos(foundTodos);
-    return {
-        raw: result,
-        todos: ranked.todos,
-        todoTotal: ranked.todoTotal,
-    };
+    return result;
 };
 
 export const openDashboard = async (folder: string, extensionUri: vscode.Uri): Promise<void> => {
@@ -226,19 +185,11 @@ export const openDashboard = async (folder: string, extensionUri: vscode.Uri): P
                     cancellable: false,
                 },
                 async () => {
-                    const scan = countFilesInDir(folder);
+                    const raw = countFilesInDir(folder);
                     const { stats: gitChanges, subrepoCount } = new GitChangeAnalyzer(
                         folder,
                     ).getAggregatedGitChangeStats();
-                    const data = parseClocData(
-                        scan.raw,
-                        folder,
-                        folderName,
-                        gitChanges,
-                        subrepoCount,
-                        scan.todos,
-                        scan.todoTotal,
-                    );
+                    const data = parseClocData(raw, folder, folderName, gitChanges, subrepoCount);
 
                     const chartScriptUri = panel.webview.asWebviewUri(
                         vscode.Uri.joinPath(extensionUri, 'media', 'chart.umd.min.js'),
