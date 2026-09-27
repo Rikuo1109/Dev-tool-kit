@@ -112,7 +112,7 @@ const isNodeBuiltin = (specifier: string): boolean => {
     return NODE_BUILTINS.has(base);
 };
 
-export const resolveFilePath = (fromDir: string, specifier: string): string | null => {
+const resolveFilePath = (fromDir: string, specifier: string): string | null => {
     const base = path.resolve(fromDir, specifier);
     for (const ext of RESOLVE_EXTENSIONS) {
         const candidate = normalizePath(base + ext);
@@ -188,7 +188,7 @@ export const resolveImport = (
     };
 };
 
-export const findNearestTsConfig = (filePath: string, workspaceRoot: string): string | null => {
+const findNearestTsConfig = (filePath: string, workspaceRoot: string): string | null => {
     const configNames = ['tsconfig.json', 'jsconfig.json', 'tsconfig.app.json'];
     let dir = path.dirname(filePath);
     const root = path.resolve(workspaceRoot);
@@ -216,7 +216,7 @@ export const findNearestTsConfig = (filePath: string, workspaceRoot: string): st
     return null;
 };
 
-export const loadTsConfigForFile = (filePath: string, workspaceRoot: string): TsConfigContext => {
+const loadTsConfigForFile = (filePath: string, workspaceRoot: string): TsConfigContext => {
     const configPath = findNearestTsConfig(filePath, workspaceRoot);
     if (!configPath) {
         return {
@@ -342,7 +342,12 @@ export class ImportGraphBuilder {
     }
 
     resolve(fromFile: string, specifier: string): string | 'external' | null {
-        const resolved = resolveImport(fromFile, specifier, this.workspaceRoot, this.getTsConfig(fromFile));
+        const resolved = resolveImport(
+            fromFile,
+            specifier,
+            this.workspaceRoot,
+            this.getTsConfig(fromFile),
+        );
         if (!resolved) {
             return null;
         }
@@ -384,7 +389,9 @@ export class ImportGraphBuilder {
 
         this.files = filterGitIgnoredPaths(
             gitRoot,
-            uris.map((uri) => normalizePath(uri.fsPath)).filter((filePath) => !excluded.has(filePath)),
+            uris
+                .map((uri) => normalizePath(uri.fsPath))
+                .filter((filePath) => !excluded.has(filePath)),
         );
 
         const javaFiles = this.files.filter((filePath) => getSourceLanguage(filePath) === 'java');
@@ -393,7 +400,12 @@ export class ImportGraphBuilder {
         this.entryPoints = await this.findEntryPoints(workspaceFolder, entryGlobs);
         for (const filePath of filterGitIgnoredPaths(
             gitRoot,
-            discoverJavaEntryPoints(this.workspaceRoot, javaFiles, this.javaTypeIndex, this.getContent),
+            discoverJavaEntryPoints(
+                this.workspaceRoot,
+                javaFiles,
+                this.javaTypeIndex,
+                this.getContent,
+            ),
         )) {
             this.entryPoints.add(filePath);
         }
@@ -482,7 +494,10 @@ export class ImportGraphBuilder {
                     if (!field) {
                         continue;
                     }
-                    const resolved = resolveFilePath(this.workspaceRoot, field.replace(/^\.\//, ''));
+                    const resolved = resolveFilePath(
+                        this.workspaceRoot,
+                        field.replace(/^\.\//, ''),
+                    );
                     if (resolved) {
                         entries.add(resolved);
                     }
@@ -577,9 +592,7 @@ export class ImportGraphBuilder {
         return results;
     }
 
-    private static parseImportClause(
-        clause: string,
-    ): {
+    private static parseImportClause(clause: string): {
         named: Set<string>;
         defaultImport: boolean;
         namespace: boolean;

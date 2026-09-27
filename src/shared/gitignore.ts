@@ -13,10 +13,6 @@ export const findGitRoot = (startDir: string): string | null => {
     }
 };
 
-export const isGitRepository = (startDir: string): boolean => {
-    return findGitRoot(startDir) !== null;
-};
-
 export const listGitVisibleFiles = (folder: string): string[] | null => {
     const gitRoot = findGitRoot(folder);
     if (!gitRoot) {

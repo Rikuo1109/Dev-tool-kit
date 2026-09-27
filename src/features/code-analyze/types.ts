@@ -53,17 +53,6 @@ export interface FilesSummary {
 
 export const PRIMARY_BUCKETS: DeadBucket[] = ['dead', 'likely-dead'];
 
-export const EMPTY_BUCKET_COUNTS = (): BucketCounts => ({
-    dead: 0,
-    'likely-dead': 0,
-    runtime: 0,
-    entry: 0,
-    tooling: 0,
-    ambient: 0,
-    vendor: 0,
-    unknown: 0,
-});
-
 export interface AnalyzeFileItem {
     relativePath: string;
     absolutePath: string;

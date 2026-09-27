@@ -18,11 +18,3 @@ export const getCachedImportIndex = (workspaceRoot: string): ImportIndex | undef
 export const setCachedImportIndex = (workspaceRoot: string, index: ImportIndex): void => {
     cache.set(workspaceRoot, { index, timestamp: Date.now() });
 };
-
-export const invalidateImportIndex = (workspaceRoot: string): void => {
-    cache.delete(workspaceRoot);
-};
-
-export const invalidateAllImportIndices = (): void => {
-    cache.clear();
-};

@@ -5,11 +5,11 @@ import { ImportIndex } from './importGraph';
 const INDEX_FILE_RE = /[/\\]index\.(tsx?|jsx?|mjs|cjs)$/i;
 const REEXPORT_FROM_RE = /export\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"]([^'"]+)['"]/g;
 
-export const isIndexBarrelFile = (filePath: string): boolean => {
+const isIndexBarrelFile = (filePath: string): boolean => {
     return INDEX_FILE_RE.test(filePath);
 };
 
-export const getLocalReexportTargets = (
+const getLocalReexportTargets = (
     content: string,
     filePath: string,
     index: ImportIndex,

@@ -100,20 +100,3 @@ const defaultExists = (absPath: string): boolean => {
         return false;
     }
 };
-
-/** Collect require.context roots mentioned in source (runtime graph seed dirs). */
-export const extractRequireContextDirs = (content: string, fromFile: string): string[] => {
-    const dirs: string[] = [];
-    const re = /require\.context\s*\(\s*['"]([^'"]+)['"]/g;
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(content)) !== null) {
-        const abs = normalizePath(path.resolve(path.dirname(fromFile), match[1]));
-        dirs.push(abs);
-    }
-    return dirs;
-};
-
-export const isUnderAnyDir = (filePath: string, dirs: string[]): boolean => {
-    const norm = normalizePath(filePath);
-    return dirs.some((dir) => norm === dir || norm.startsWith(dir.endsWith('/') ? dir : `${dir}/`));
-};
