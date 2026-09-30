@@ -36,13 +36,48 @@ const resolveCli = (name) => {
     return candidates[0] ?? null;
 };
 
+/** Node 22+ throws EINVAL when CreateProcess targets a .cmd/.bat. Go through cmd.exe. */
+const quoteCmdArg = (arg) => {
+    const escaped = arg.replace(/%/g, '%%').replace(/"/g, '""');
+    if (escaped.length === 0 || /[\s"&<>()@^|]/.test(arg)) {
+        return `"${escaped}"`;
+    }
+    return escaped;
+};
+
+const windowsShellArgs = (cli, args) => {
+    const command = [cli, ...args].map(quoteCmdArg).join(' ');
+    // /s strips the first and last quote, so the whole command stays one string.
+    return ['/d', '/s', '/c', `"${command}"`];
+};
+
+const runCli = (cli, args) => {
+    if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(cli)) {
+        execFileSync(process.env.ComSpec || 'cmd.exe', windowsShellArgs(cli, args), {
+            stdio: 'inherit',
+            windowsVerbatimArguments: true,
+        });
+        return;
+    }
+    execFileSync(cli, args, { stdio: 'inherit' });
+};
+
 const pickedCmd = pickWindowsCli(
     ['C:\\VS Code\\bin\\code', 'C:\\VS Code\\bin\\code.cmd'],
     () => false,
 );
 const pickedSibling = pickWindowsCli(['C:\\VS Code\\bin\\code'], (file) => file.endsWith('.cmd'));
-if (pickedCmd !== 'C:\\VS Code\\bin\\code.cmd' || pickedSibling !== 'C:\\VS Code\\bin\\code.cmd') {
-    throw new Error('pickWindowsCli self-check failed');
+const shellLine = windowsShellArgs(
+    'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd',
+    ['--install-extension', 'D:\\cds\\kyo-tools-0.0.1.vsix', '--force'],
+).join(' ');
+if (
+    pickedCmd !== 'C:\\VS Code\\bin\\code.cmd' ||
+    pickedSibling !== 'C:\\VS Code\\bin\\code.cmd' ||
+    shellLine !==
+        '/d /s /c ""C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd" --install-extension D:\\cds\\kyo-tools-0.0.1.vsix --force"'
+) {
+    throw new Error('install-local self-check failed');
 }
 
 const root = path.join(__dirname, '..');
@@ -67,6 +102,4 @@ if (!cli) {
 }
 
 console.log(`Installing with ${cli}`);
-execFileSync(cli, ['--install-extension', vsix, '--force'], {
-    stdio: 'inherit',
-});
+runCli(cli, ['--install-extension', vsix, '--force']);
