@@ -1,12 +1,13 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { formatFilesForAi } from '../../shared/aiFormat';
 import { normalizePath, toRelativePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
+import { getCachedImportIndex } from '../../shared/importIndexCache';
 import { ImportIndex } from '../../shared/javascript/importGraph';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { getCodeGraphHtml, getCodeGraphLoadingHtml } from './panel';
 import { CodeGraphData, GraphEdge, GraphExpansion, GraphNode } from './types';
-import { getCachedImportIndex } from '../../shared/importIndexCache';
 
 export type { CodeGraphData, GraphExpansion } from './types';
 
@@ -173,53 +174,6 @@ const toGraphData = (
     };
 };
 
-const readText = async (uri: vscode.Uri): Promise<string> => {
-    const doc = await vscode.workspace.openTextDocument(uri);
-    return doc.getText();
-};
-
-const languageFromPath = (filePath: string): string => {
-    const ext = path.extname(filePath).toLowerCase();
-    const byExt: Record<string, string> = {
-        '.ts': 'typescript',
-        '.tsx': 'tsx',
-        '.js': 'javascript',
-        '.jsx': 'jsx',
-        '.json': 'json',
-        '.md': 'markdown',
-        '.css': 'css',
-        '.scss': 'scss',
-        '.html': 'html',
-        '.yaml': 'yaml',
-        '.yml': 'yaml',
-        '.py': 'python',
-        '.go': 'go',
-        '.rs': 'rust',
-        '.vue': 'vue',
-        '.sql': 'sql',
-        '.sh': 'bash',
-    };
-    return byExt[ext] ?? '';
-};
-
-const formatFilesForAi = async (filePaths: string[], workspaceRoot: string): Promise<string> => {
-    const blocks: string[] = [];
-
-    for (const filePath of filePaths) {
-        try {
-            const content = await readText(vscode.Uri.file(filePath));
-            const rel = toRelativePath(normalizePath(filePath), workspaceRoot);
-            const lang = languageFromPath(filePath);
-            const fence = lang ? `\`\`\`${lang}:${rel}` : `\`\`\`${rel}`;
-            blocks.push(`${fence}\n${content}\n\`\`\``);
-        } catch {
-            // Skip unreadable files.
-        }
-    }
-
-    return blocks.join('\n\n');
-};
-
 export const openCodeGraph = async (fileUri: vscode.Uri): Promise<void> => {
     const fileName = path.basename(fileUri.fsPath);
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
@@ -272,7 +226,7 @@ export const openCodeGraph = async (fileUri: vscode.Uri): Promise<void> => {
             const paths = (message.paths as unknown[]).filter(
                 (value): value is string => typeof value === 'string',
             );
-            const text = await formatFilesForAi(paths, workspaceFolder.uri.fsPath);
+            const { text } = await formatFilesForAi(paths, workspaceFolder.uri.fsPath);
 
             if (!text) {
                 void vscode.window.showWarningMessage('Could not read selected files for copy');

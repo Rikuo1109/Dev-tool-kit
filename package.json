@@ -41,6 +41,16 @@
                 "command": "kyo-tools.codeAnalyze",
                 "title": "Code Analyze",
                 "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.copyFolderCode",
+                "title": "Copy Folder Code for AI",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.commitHeatmap",
+                "title": "Commit Heatmap",
+                "category": "Kyo Tools"
             }
         ],
         "configuration": {
@@ -130,6 +140,14 @@
                 {
                     "command": "kyo-tools.codeAnalyze",
                     "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.copyFolderCode",
+                    "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.commitHeatmap",
+                    "when": "workspaceFolderCount != 0"
                 }
             ],
             "explorer/context": [
@@ -144,9 +162,19 @@
                     "group": "2_z_kyoTools@2"
                 },
                 {
+                    "command": "kyo-tools.copyFolderCode",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@3"
+                },
+                {
                     "command": "kyo-tools.organizeImports",
                     "when": "explorerResourceIsFolder",
                     "group": "2_z_kyoTools@4"
+                },
+                {
+                    "command": "kyo-tools.commitHeatmap",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@5"
                 },
                 {
                     "command": "kyo-tools.codeGraph",

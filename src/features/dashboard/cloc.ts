@@ -529,6 +529,17 @@ export const getDashboardHtml = (
       vscode.postMessage({ type: "reload" });
     });
 
+    window.addEventListener("message", (event) => {
+      if (event.data?.type !== "reloadDone") {
+        return;
+      }
+      const btn = document.getElementById("reload-btn");
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = false;
+        btn.textContent = "Reload";
+      }
+    });
+
     const labels = ${JSON.stringify(data.languages.map((l) => l.name))};
     const values = ${JSON.stringify(data.languages.map((l) => l.code))};
     const colors = ${JSON.stringify(chartColors)};

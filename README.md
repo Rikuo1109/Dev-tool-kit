@@ -29,6 +29,17 @@ Dependency graph for a single file. Shows dependencies, dependents, and external
 
 Language stats, file size chart, and git change history (last 30 days).
 
+### Commit Heatmap
+
+GitHub-style calendar of commits for the whole project (`Kyo Tools: Commit Heatmap` from the command palette, or right-click a folder in Explorer).
+
+- Covers the workspace folder's repo and every repo nested inside it; when the folder is not a repo itself, each inner repo is included. Commits are read from each repo's `HEAD` and de-duplicated by hash.
+- Range: last 3 / 6 / 12 months (default 12), all time, or a single year.
+- Author filter: all authors, **Only me** (your `git config user.email`), or any single author — your identity is listed first.
+- Stats for the selected range: total commits, active days, longest streak, busiest day, plus your current streak.
+- Hover a day for its count; click it to list that day's commits (repo, short hash, subject, author). Click a hash to copy it.
+- **Reload** only re-reads repos whose `HEAD` changed.
+
 ### Organize Imports
 
 Batch organize imports across `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue` files. Progress panel with results tabs.

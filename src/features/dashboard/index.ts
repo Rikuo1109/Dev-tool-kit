@@ -1,154 +1,11 @@
-import { readdirSync } from 'fs';
-import { extname, join } from 'path';
 import * as vscode from 'vscode';
-import { readFileSafe } from '../../shared/fs';
-import { listGitVisibleFiles } from '../../shared/gitignore';
 import { isDarkTheme } from '../../shared/html';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { getDashboardHtml, parseClocData } from './cloc';
-import { GitChangeAnalyzer } from './gitChanges';
+import { countFiles, FileStatsCache, scanFolder } from './fileStats';
+import { GitChangeAnalyzer, GitLogCache } from './gitChanges';
 
 let activePanel: vscode.WebviewPanel | undefined;
-
-const countCodeLines = (
-    content: string,
-): {
-    code: number;
-    blank: number;
-    comment: number;
-} => {
-    const lines = content.split('\n');
-    let code = 0,
-        blank = 0,
-        comment = 0;
-    let inBlockComment = false;
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-
-        // Block comments
-        if (trimmed.includes('/*')) {
-            inBlockComment = true;
-        }
-        if (inBlockComment) {
-            comment++;
-            if (trimmed.includes('*/')) {
-                inBlockComment = false;
-            }
-            continue;
-        }
-
-        // Blank lines
-        if (!trimmed) {
-            blank++;
-        } else if (trimmed.startsWith('//')) {
-            comment++;
-        } else {
-            code++;
-        }
-    }
-
-    return { code, blank, comment };
-};
-
-const walkUntrackedFiles = (dirPath: string, excludeDirs: Set<string>): string[] => {
-    const files: string[] = [];
-    const walk = (dir: string) => {
-        try {
-            for (const entry of readdirSync(dir, { withFileTypes: true })) {
-                if (entry.name.startsWith('.') || excludeDirs.has(entry.name)) {
-                    continue;
-                }
-                const fullPath = join(dir, entry.name);
-                if (entry.isDirectory()) {
-                    walk(fullPath);
-                } else {
-                    files.push(fullPath);
-                }
-            }
-        } catch {
-            // Skip unreadable dirs
-        }
-    };
-    walk(dirPath);
-    return files;
-};
-
-const countFilesInDir = (
-    dirPath: string,
-    excludeDirs = new Set(['node_modules', 'dist', 'build', '.git', '.gitnexus']),
-): Record<string, unknown> => {
-    const result: Record<string, unknown> = {};
-    let totalFiles = 0;
-    let totalCode = 0;
-    let totalBlank = 0;
-    let totalComment = 0;
-
-    const compressedExts = new Set(['.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z', '.rar', '.xz']);
-    const gitFiles = listGitVisibleFiles(dirPath);
-    const filesToProcess = gitFiles
-        ? gitFiles.filter((filePath) => !filePath.split(/[/\\]/).some((part) => excludeDirs.has(part)))
-        : walkUntrackedFiles(dirPath, excludeDirs);
-
-    const langMap: Record<string, string> = {
-        '.js': 'JavaScript',
-        '.ts': 'TypeScript',
-        '.jsx': 'JavaScript',
-        '.tsx': 'TypeScript',
-        '.py': 'Python',
-        '.java': 'Java',
-        '.go': 'Go',
-        '.rs': 'Rust',
-        '.rb': 'Ruby',
-        '.php': 'PHP',
-        '.css': 'CSS',
-        '.html': 'HTML',
-        '.json': 'JSON',
-        '.yaml': 'YAML',
-        '.yml': 'YAML',
-        '.md': 'Markdown',
-        '.sh': 'Shell',
-    };
-
-    for (const fullPath of filesToProcess) {
-        try {
-            const ext = extname(fullPath).toLowerCase();
-            if (compressedExts.has(ext)) {
-                continue;
-            }
-
-            const lang = langMap[ext] || ext.slice(1).toUpperCase() || 'Unknown';
-            const content = readFileSafe(fullPath);
-            if (!content) {
-                continue;
-            }
-            const counts = countCodeLines(content);
-
-            result[fullPath] = {
-                blank: counts.blank,
-                comment: counts.comment,
-                code: counts.code,
-                language: lang,
-            };
-
-            totalFiles++;
-            totalCode += counts.code;
-            totalBlank += counts.blank;
-            totalComment += counts.comment;
-        } catch {
-            // Skip unreadable files
-        }
-    }
-
-    result.SUM = {
-        nFiles: totalFiles,
-        code: totalCode,
-        blank: totalBlank,
-        comment: totalComment,
-    };
-
-    return result;
-};
 
 export const openDashboard = async (folder: string, extensionUri: vscode.Uri): Promise<void> => {
     const folderName = folder.split(/[/\\]/).pop() ?? folder;
@@ -177,7 +34,12 @@ export const openDashboard = async (folder: string, extensionUri: vscode.Uri): P
             }
         });
 
-        const render = async () => {
+        // Per-panel caches: unchanged files are not re-read and unchanged HEADs skip `git log`.
+        const fileCache: FileStatsCache = new Map();
+        const gitLogCache: GitLogCache = new Map();
+        let inFlight: Promise<void> | undefined;
+
+        const computeAndRender = async () => {
             await vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
@@ -185,22 +47,37 @@ export const openDashboard = async (folder: string, extensionUri: vscode.Uri): P
                     cancellable: false,
                 },
                 async () => {
-                    const raw = countFilesInDir(folder);
-                    const { stats: gitChanges, subrepoCount } = new GitChangeAnalyzer(
-                        folder,
-                    ).getAggregatedGitChangeStats();
+                    // One scan decides both the counted files and the repos whose history is merged.
+                    const scan = await scanFolder(folder);
+                    const analyzer = new GitChangeAnalyzer(folder, gitLogCache, scan.subrepos);
+                    const [raw, { stats: gitChanges, subrepoCount }] = await Promise.all([
+                        countFiles(scan.files, fileCache),
+                        analyzer.getAggregatedGitChangeStats(),
+                    ]);
                     const data = parseClocData(raw, folder, folderName, gitChanges, subrepoCount);
 
                     const chartScriptUri = panel.webview.asWebviewUri(
                         vscode.Uri.joinPath(extensionUri, 'media', 'chart.umd.min.js'),
                     );
 
-                    panel.webview.html = getDashboardHtml(data, isDarkTheme(), {
+                    const html = getDashboardHtml(data, isDarkTheme(), {
                         chartScriptUri: chartScriptUri.toString(),
                         cspSource: panel.webview.cspSource,
                     });
+
+                    // Re-assigning identical HTML reloads the webview and Chart.js for nothing.
+                    if (panel.webview.html !== html) {
+                        panel.webview.html = html;
+                    }
                 },
             );
+        };
+
+        const render = (): Promise<void> => {
+            inFlight ??= computeAndRender().finally(() => {
+                inFlight = undefined;
+            });
+            return inFlight;
         };
 
         panel.webview.onDidReceiveMessage(async (message) => {
@@ -218,6 +95,9 @@ export const openDashboard = async (folder: string, extensionUri: vscode.Uri): P
                     const errMessage =
                         error instanceof Error ? error.message : 'Failed to reload dashboard';
                     vscode.window.showErrorMessage(errMessage);
+                } finally {
+                    // Re-enables the Reload button when the HTML was not replaced.
+                    void panel.webview.postMessage({ type: 'reloadDone' });
                 }
             }
         });

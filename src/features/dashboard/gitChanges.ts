@@ -1,6 +1,10 @@
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { promisify } from 'util';
+import { mapWithConcurrency } from '../../shared/async';
+
+const execFileAsync = promisify(execFile);
 
 export interface LineChangeStats {
     added: number;
@@ -40,6 +44,18 @@ interface DailyBucket {
     deleted: number;
 }
 
+interface GitLogCacheEntry {
+    head: string;
+    todayKey: string;
+    byDate: Map<string, DailyBucket>;
+}
+
+/**
+ * Committed-history buckets keyed by `gitRoot::scope`. Valid while HEAD and the local
+ * date are unchanged (`git log` output only depends on those). Treat `byDate` as read-only.
+ */
+export type GitLogCache = Map<string, GitLogCacheEntry>;
+
 interface GitDailyStats {
     available: boolean;
     message?: string;
@@ -57,14 +73,25 @@ export class GitChangeAnalyzer {
     static readonly NUMSTAT_RE = /^(\d+|-)\t(\d+|-)\t/;
     static readonly NUMSTAT_FILE_RE = /^(\d+|-)\t(\d+|-)\t(.+)$/;
     static readonly EXCLUDE_DIRS = new Set(['node_modules', 'dist', 'build', '.git']);
+    static readonly SUBREPO_CONCURRENCY = 4;
+    static readonly MAX_BUFFER = 32 * 1024 * 1024;
 
     private readonly folder: string;
     private readonly displayRoot: string;
     private readonly gitRoot: string | null;
     private readonly scope: string;
+    private readonly logCache?: GitLogCache;
+    private readonly subrepos?: string[];
 
-    constructor(folder: string) {
+    /**
+     * @param subrepos Repos inside `folder` whose history is merged. Pass the dashboard's
+     * file-scan result so history and file counts cover the same repos; when omitted,
+     * repos within three levels are discovered here.
+     */
+    constructor(folder: string, logCache?: GitLogCache, subrepos?: string[]) {
         this.folder = folder;
+        this.logCache = logCache;
+        this.subrepos = subrepos;
         this.displayRoot = path.resolve(folder);
         this.gitRoot = this.findGitRoot(folder);
         this.scope = this.gitRoot
@@ -74,12 +101,16 @@ export class GitChangeAnalyzer {
 
     // ─── Public API ───────────────────────────────────────────────────────────
 
-    getAggregatedGitChangeStats(): {
+    async getAggregatedGitChangeStats(): Promise<{
         stats: GitChangeStats;
         subrepoCount: number;
-    } {
-        const main = this.collectGitDailyStats();
-        const subrepos = this.findSubrepos();
+    }> {
+        const subrepos = this.subrepos ?? this.findSubrepos();
+        const [main, ...subrepoStats] = await mapWithConcurrency(
+            [undefined, ...subrepos],
+            GitChangeAnalyzer.SUBREPO_CONCURRENCY,
+            (target) => this.collectGitDailyStats(target),
+        );
 
         if (subrepos.length === 0) {
             return { stats: this.toChangeStats(main), subrepoCount: 0 };
@@ -98,8 +129,7 @@ export class GitChangeAnalyzer {
         let totalUncommitted = main.available ? main.uncommittedNet : 0;
         let anyAvailable = main.available;
 
-        for (const subrepo of subrepos) {
-            const daily = this.collectGitDailyStats(subrepo);
+        for (const daily of subrepoStats) {
             if (!daily.available) {
                 continue;
             }
@@ -142,16 +172,58 @@ export class GitChangeAnalyzer {
 
     // ─── Private: Git execution ───────────────────────────────────────────────
 
-    private runGit(args: string[]): string {
-        return execFileSync('git', ['-C', this.gitRoot!, ...args], {
+    private static async runGit(gitRoot: string, args: string[]): Promise<string> {
+        const { stdout } = await execFileAsync('git', ['-C', gitRoot, ...args], {
             encoding: 'utf-8',
-            maxBuffer: 32 * 1024 * 1024,
+            maxBuffer: GitChangeAnalyzer.MAX_BUFFER,
         });
+        return stdout;
+    }
+
+    private static async readHead(gitRoot: string): Promise<string | null> {
+        try {
+            return (await GitChangeAnalyzer.runGit(gitRoot, ['rev-parse', 'HEAD'])).trim() || null;
+        } catch {
+            return null; // Unborn branch etc. — fall through to `git log` for the original error.
+        }
+    }
+
+    /** `git log --numstat` buckets, served from cache when HEAD and the date are unchanged. */
+    private async readCommittedBuckets(
+        gitRoot: string,
+        scope: string,
+    ): Promise<Map<string, DailyBucket>> {
+        const cacheKey = `${gitRoot}::${scope}`;
+        const todayKey = GitChangeAnalyzer.localDateKey();
+        const head = this.logCache ? await GitChangeAnalyzer.readHead(gitRoot) : null;
+        const cached = this.logCache?.get(cacheKey);
+        if (head && cached && cached.head === head && cached.todayKey === todayKey) {
+            return cached.byDate;
+        }
+
+        const args = [
+            'log',
+            `--since=${GitChangeAnalyzer.HISTORY_DAYS} days ago`,
+            '--format=%ad',
+            '--date=short',
+            '--numstat',
+            '--no-renames',
+        ];
+
+        if (scope && scope !== '.') {
+            args.push('--', scope);
+        }
+
+        const byDate = this.parseGitNumstat(await GitChangeAnalyzer.runGit(gitRoot, args));
+        if (head) {
+            this.logCache?.set(cacheKey, { head, todayKey, byDate });
+        }
+        return byDate;
     }
 
     // ─── Private: Daily stats ─────────────────────────────────────────────────
 
-    private collectGitDailyStats(targetFolder?: string): GitDailyStats {
+    private async collectGitDailyStats(targetFolder?: string): Promise<GitDailyStats> {
         const emptyToday = GitChangeAnalyzer.emptyLineStats();
         const emptyByDate = new Map<string, DailyBucket>();
 
@@ -172,28 +244,12 @@ export class GitChangeAnalyzer {
         const scope = path.relative(gitRoot, resolvedFolder).replace(/\\/g, '/');
 
         try {
-            const args = [
-                'log',
-                `--since=${GitChangeAnalyzer.HISTORY_DAYS} days ago`,
-                '--format=%ad',
-                '--date=short',
-                '--numstat',
-                '--no-renames',
-            ];
-
-            if (scope && scope !== '.') {
-                args.push('--', scope);
-            }
-
-            const byDate = this.parseGitNumstat(
-                execFileSync('git', ['-C', gitRoot, ...args], {
-                    encoding: 'utf-8',
-                    maxBuffer: 32 * 1024 * 1024,
-                }),
-            );
+            const [byDate, uncommitted] = await Promise.all([
+                this.readCommittedBuckets(gitRoot, scope),
+                this.getUncommittedChangesFor(gitRoot, scope, resolvedFolder),
+            ]);
             const todayKey = GitChangeAnalyzer.localDateKey();
             const todayBucket = byDate.get(todayKey) ?? { added: 0, deleted: 0 };
-            const uncommitted = this.getUncommittedChangesFor(gitRoot, scope, resolvedFolder);
 
             return {
                 available: true,
@@ -254,33 +310,27 @@ export class GitChangeAnalyzer {
         return byDate;
     }
 
-    private getUncommittedChangesFor(
+    private async getUncommittedChangesFor(
         gitRoot: string,
         scope: string,
         displayRoot: string,
-    ): { net: number; files: UncommittedFile[] } {
+    ): Promise<{ net: number; files: UncommittedFile[] }> {
         const pathArgs = GitChangeAnalyzer.scopeArgs(scope);
         const byFile = new Map<string, UncommittedFile>();
 
-        this.mergeNumstatIntoFiles(
-            execFileSync('git', ['-C', gitRoot, 'diff', '--numstat', '--no-renames', ...pathArgs], {
-                encoding: 'utf-8',
-                maxBuffer: 32 * 1024 * 1024,
-            }),
-            gitRoot,
-            displayRoot,
-            byFile,
-        );
-        this.mergeNumstatIntoFiles(
-            execFileSync(
-                'git',
-                ['-C', gitRoot, 'diff', '--cached', '--numstat', '--no-renames', ...pathArgs],
-                { encoding: 'utf-8', maxBuffer: 32 * 1024 * 1024 },
-            ),
-            gitRoot,
-            displayRoot,
-            byFile,
-        );
+        const [unstaged, staged] = await Promise.all([
+            GitChangeAnalyzer.runGit(gitRoot, ['diff', '--numstat', '--no-renames', ...pathArgs]),
+            GitChangeAnalyzer.runGit(gitRoot, [
+                'diff',
+                '--cached',
+                '--numstat',
+                '--no-renames',
+                ...pathArgs,
+            ]),
+        ]);
+        // Merge order (unstaged, then staged) matches the previous sequential version.
+        this.mergeNumstatIntoFiles(unstaged, gitRoot, displayRoot, byFile);
+        this.mergeNumstatIntoFiles(staged, gitRoot, displayRoot, byFile);
 
         const files = [...byFile.values()].sort(
             (a, b) =>

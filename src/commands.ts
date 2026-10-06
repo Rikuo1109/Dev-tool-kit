@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { analyzeCodeInFolder } from './features/code-analyze';
 import { openCodeGraph } from './features/code-graph';
+import { openCommitHeatmap } from './features/commit-heatmap';
+import { copyFolderCode } from './features/copy-folder-code';
 import { openDashboard } from './features/dashboard';
 import { initAiTemplate } from './features/init-ai-template';
 import { organizeImportsInFolder } from './features/organize-imports';
@@ -70,6 +72,22 @@ const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
         resolveFolderFromWorkspace: true,
         handler: async (uri) => {
             await analyzeCodeInFolder(uri!);
+        },
+    },
+    {
+        id: 'kyo-tools.commitHeatmap',
+        errorTitle: 'Commit heatmap failed',
+        resolveFolderFromWorkspace: true,
+        handler: async (uri) => {
+            await openCommitHeatmap(uri!);
+        },
+    },
+    {
+        id: 'kyo-tools.copyFolderCode',
+        errorTitle: 'Copy folder code failed',
+        resolveFolderFromWorkspace: true,
+        handler: async (uri) => {
+            await copyFolderCode(uri!);
         },
     },
 ];
