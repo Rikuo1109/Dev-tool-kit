@@ -15,6 +15,34 @@ const hexToRgba = (hex: string, alpha: number): string => {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+const LEVELS = 9;
+
+const parseHex = (hex: string): [number, number, number] => {
+    const v = hex.replace('#', '');
+    return [0, 2, 4].map((i) => Number.parseInt(v.slice(i, i + 2), 16)) as [number, number, number];
+};
+
+const mixHex = (from: string, to: string, amount: number): string => {
+    const a = parseHex(from);
+    const b = parseHex(to);
+    return `#${a
+        .map((value, i) => Math.round(value + (b[i] - value) * amount).toString(16).padStart(2, '0'))
+        .join('')}`;
+};
+
+/**
+ * Nine solid colours with clearly increasing contrast against the panel background:
+ * faint accent → accent → strong end (brighter on dark, deeper on light).
+ */
+const levelColors = (t: PanelTheme, isDark: boolean): string[] => {
+    const low = isDark ? mixHex(t.surface, t.accent, 0.22) : mixHex('#ffffff', t.accent, 0.14);
+    const high = isDark ? mixHex(t.accent, '#ffffff', 0.62) : mixHex(t.accent, '#000000', 0.55);
+    return Array.from({ length: LEVELS }, (_, i) => {
+        const u = i / (LEVELS - 1);
+        return u <= 0.6 ? mixHex(low, t.accent, u / 0.6) : mixHex(t.accent, high, (u - 0.6) / 0.4);
+    });
+};
+
 /** JSON safe to embed inside a <script> element. */
 const embedJson = (value: unknown): string => {
     return JSON.stringify(value)
@@ -23,7 +51,7 @@ const embedJson = (value: unknown): string => {
         .replace(/\u2029/g, '\\u2029');
 };
 
-const heatmapStyles = (t: PanelTheme): string => `
+const heatmapStyles = (t: PanelTheme, isDark: boolean): string => `
     ${panelContentStyles(t)}
 
     .controls {
@@ -153,10 +181,9 @@ const heatmapStyles = (t: PanelTheme): string => `
     }
 
     .cell.out { background: transparent; outline: none; cursor: default; }
-    .cell.l1 { background: ${hexToRgba(t.accent, 0.28)}; }
-    .cell.l2 { background: ${hexToRgba(t.accent, 0.5)}; }
-    .cell.l3 { background: ${hexToRgba(t.accent, 0.75)}; }
-    .cell.l4 { background: ${t.accent}; }
+${levelColors(t, isDark)
+    .map((color, i) => `    .cell.l${i + 1} { background: ${color}; }`)
+    .join('\n')}
     .cell:not(.out):hover { outline: 1px solid ${t.text}; }
     .cell.selected { outline: 2px solid ${t.text}; outline-offset: 0; }
 
@@ -172,6 +199,14 @@ const heatmapStyles = (t: PanelTheme): string => `
 
     .legend .cell { cursor: default; }
     .legend .label { margin: 0 4px; }
+    .legend .tick {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-width: var(--cell);
+    }
+    .legend .tick span { font-size: 0.56rem; font-variant-numeric: tabular-nums; min-height: 0.7rem; }
 
     .tooltip {
       position: fixed;
@@ -269,7 +304,10 @@ const clientScript = (): string => `
   const plural = (n, word) => n.toLocaleString() + " " + word + (n === 1 ? "" : "s");
   const todayTime = toTime(data.today);
 
+  const LEVELS = 9;
   const rangeSelect = document.getElementById("range");
+  const scaleSelect = document.getElementById("scale");
+  const legendEl = document.getElementById("legend");
   const authorSelect = document.getElementById("author");
   const calendarEl = document.getElementById("calendar");
   const rangeTitleEl = document.getElementById("range-title");
@@ -301,8 +339,10 @@ const clientScript = (): string => `
     range: rangeOptions.some((o) => o[0] === saved.range) ? saved.range : "12m",
     author: authorOptions.some((o) => o[0] === saved.author) ? saved.author : "all",
     day: typeof saved.day === "string" ? saved.day : null,
+    scale: saved.scale === "range" ? "range" : "month",
   };
   rangeSelect.value = state.range;
+  scaleSelect.value = state.scale;
   authorSelect.value = state.author;
   const persist = () => vscode.setState(state);
 
@@ -343,16 +383,70 @@ const clientScript = (): string => `
     return { start, end: todayTime };
   };
 
+  // Log position of c between lo and hi (both > 0), mapped onto levels 1..LEVELS.
+  // Log keeps 1/3/6/31/148 visually apart, where linear would crush the low counts.
+  const logLevel = (c, lo, hi) => {
+    if (hi <= lo) return Math.ceil(LEVELS / 2);
+    const t = Math.min(1, Math.max(0, Math.log(c / lo) / Math.log(hi / lo)));
+    return 1 + Math.round(t * (LEVELS - 1));
+  };
+
   const levelScale = (counts, start, end) => {
     const values = [];
+    const months = new Map();
     for (let t = start; t <= end; t += DAY) {
-      const c = counts.get(toKey(t));
-      if (c) values.push(c);
+      const key = toKey(t);
+      const c = counts.get(key);
+      if (!c) continue;
+      values.push(c);
+      const m = months.get(key.slice(0, 7));
+      if (m) { m.min = Math.min(m.min, c); m.max = Math.max(m.max, c); } else { months.set(key.slice(0, 7), { min: c, max: c }); }
     }
+
+    if (state.scale === "month") {
+      return {
+        mode: "month",
+        months,
+        levelOf: (c, key) => {
+          if (!c) return 0;
+          const m = months.get(key.slice(0, 7));
+          return m ? logLevel(c, m.min, m.max) : 0;
+        },
+      };
+    }
+
+    // Whole range: log scale from the smallest active day to the 95th percentile, so a
+    // single outlier (e.g. 148) saturates the top colour instead of flattening the rest.
     values.sort((a, b) => a - b);
-    const q = (p) => values.length ? values[Math.min(values.length - 1, Math.floor(values.length * p))] : 0;
-    const q1 = q(0.25), q2 = q(0.5), q3 = q(0.75);
-    return (c) => (!c ? 0 : c <= q1 ? 1 : c <= q2 ? 2 : c <= q3 ? 3 : 4);
+    const lo = values.length ? values[0] : 1;
+    const p95 = values.length ? values[Math.min(values.length - 1, Math.floor(values.length * 0.95))] : 1;
+    const hi = Math.max(lo, p95);
+    const ticks = [];
+    for (let level = 1; level <= LEVELS; level++) {
+      // Smallest count that lands on this level (inverse of logLevel's rounding).
+      const t = Math.max(0, (level - 1.5) / (LEVELS - 1));
+      ticks.push(level === 1 ? lo : Math.max(lo, Math.ceil(lo * Math.exp(t * Math.log(hi / lo)))));
+    }
+    return { mode: "range", lo, hi, max: values.length ? values[values.length - 1] : 0, ticks, levelOf: (c) => (c ? logLevel(c, lo, hi) : 0) };
+  };
+
+  const renderLegend = (scale) => {
+    const swatch = (level) => '<div class="cell l' + level + '"></div>';
+    let html = '<div class="cell l0" title="No commits"></div>';
+    if (scale.mode === "month") {
+      for (let level = 1; level <= LEVELS; level++) html += swatch(level);
+      legendEl.innerHTML = '<span class="label">Each month: fewest</span>' + html + '<span class="label">most commits/day</span>';
+      return;
+    }
+    // Numeric ticks; drop repeated values (small ranges) so labels stay readable.
+    let previous = -1;
+    for (let level = 1; level <= LEVELS; level++) {
+      const tick = scale.ticks[level - 1];
+      const label = level === LEVELS && scale.max > tick ? tick + "+" : tick !== previous ? String(tick) : "";
+      previous = tick;
+      html += '<div class="tick" title="' + tick + (level === LEVELS ? "+" : "") + ' commits">' + swatch(level) + "<span>" + label + "</span></div>";
+    }
+    legendEl.innerHTML = '<span class="label">Commits/day</span>' + html;
   };
 
   const computeStats = (counts, start, end) => {
@@ -394,7 +488,7 @@ const clientScript = (): string => `
         if (date.getUTCDate() === 1 || t === start) labels.push({ week: w, text: MONTHS[date.getUTCMonth()] });
         const key = toKey(t);
         const c = counts.get(key) || 0;
-        cells += '<div class="cell l' + levelOf(c) + (key === state.day ? " selected" : "") +
+        cells += '<div class="cell l' + levelOf(c, key) + (key === state.day ? " selected" : "") +
           '" data-date="' + key + '" data-count="' + c + '"></div>';
       }
     }
@@ -425,10 +519,15 @@ const clientScript = (): string => `
     document.getElementById(id + "-sub").textContent = sub || "";
   };
 
+  let currentScale = null;
+
   const render = () => {
     const counts = countsByDay();
     const bounds = rangeBounds();
-    const levelOf = levelScale(counts, bounds.start, bounds.end);
+    const scale = levelScale(counts, bounds.start, bounds.end);
+    currentScale = scale;
+    const levelOf = scale.levelOf;
+    renderLegend(scale);
     const stats = computeStats(counts, bounds.start, bounds.end);
 
     rangeTitleEl.textContent = fmtDate(bounds.start) + " – " + fmtDate(bounds.end);
@@ -487,12 +586,15 @@ const clientScript = (): string => `
   // ── Events ────────────────────────────────────────────────
   rangeSelect.addEventListener("change", () => { state.range = rangeSelect.value; persist(); render(); });
   authorSelect.addEventListener("change", () => { state.author = authorSelect.value; persist(); render(); });
+  scaleSelect.addEventListener("change", () => { state.scale = scaleSelect.value; persist(); render(); });
 
   calendarEl.addEventListener("mouseover", (event) => {
     const cell = event.target.closest(".cell[data-date]");
     if (!cell) { tooltip.style.display = "none"; return; }
     const c = +cell.dataset.count;
-    tooltip.innerHTML = (c ? "<strong>" + plural(c, "commit") + "</strong>" : "No commits") + " on " + fmtLong(cell.dataset.date);
+    const month = currentScale && currentScale.mode === "month" ? currentScale.months.get(cell.dataset.date.slice(0, 7)) : null;
+    tooltip.innerHTML = (c ? "<strong>" + plural(c, "commit") + "</strong>" : "No commits") + " on " + fmtLong(cell.dataset.date) +
+      (c && month ? ' <span style="opacity:.7">· month ' + month.min + "–" + month.max + "/day</span>" : "");
     tooltip.style.display = "block";
   });
   calendarEl.addEventListener("mousemove", (event) => {
@@ -566,13 +668,17 @@ export const getCommitHeatmapHtml = (payload: HeatmapPayload, isDark: boolean): 
 
     return panelDocument({
         title: 'Commit Heatmap',
-        styles: heatmapStyles(t),
+        styles: heatmapStyles(t, isDark),
         body: `
   ${renderPanelHeader('Commit Heatmap', subtitle, reloadBtn)}
   ${failed}${empty}
   <div class="controls">
     <label>Range <select id="range"></select></label>
     <label>Author <select id="author"></select></label>
+    <label>Scale <select id="scale">
+      <option value="month">Per month</option>
+      <option value="range">Whole range</option>
+    </select></label>
   </div>
   <div class="stats">
     ${statCard('stat-total', 'Commits', 'highlight')}
@@ -583,11 +689,7 @@ export const getCommitHeatmapHtml = (payload: HeatmapPayload, isDark: boolean): 
   <div class="calendar-card">
     <h2 id="range-title"></h2>
     <div class="calendar-scroll" id="calendar"></div>
-    <div class="legend">
-      <span class="label">Less</span>
-      <div class="cell l0"></div><div class="cell l1"></div><div class="cell l2"></div><div class="cell l3"></div><div class="cell l4"></div>
-      <span class="label">More</span>
-    </div>
+    <div class="legend" id="legend"></div>
   </div>
   <div class="day-card">
     <h2 id="day-title">Commits</h2>
