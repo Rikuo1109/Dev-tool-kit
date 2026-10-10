@@ -175,7 +175,7 @@ const heatmapStyles = (t: PanelTheme, isDark: boolean): string => `
       height: var(--cell);
       border-radius: 2px;
       background: ${t.barTrack};
-      outline: 1px solid ${hexToRgba(t.text === '#e8eaef' ? '#ffffff' : '#000000', 0.04)};
+      outline: 1px solid ${hexToRgba(isDark ? '#ffffff' : '#000000', 0.04)};
       outline-offset: -1px;
       cursor: pointer;
     }
@@ -304,7 +304,7 @@ const clientScript = (): string => `
   const plural = (n, word) => n.toLocaleString() + " " + word + (n === 1 ? "" : "s");
   const todayTime = toTime(data.today);
 
-  const LEVELS = 9;
+  const LEVELS = ${LEVELS};
   const rangeSelect = document.getElementById("range");
   const scaleSelect = document.getElementById("scale");
   const legendEl = document.getElementById("legend");
@@ -419,15 +419,17 @@ const clientScript = (): string => `
     // single outlier (e.g. 148) saturates the top colour instead of flattening the rest.
     values.sort((a, b) => a - b);
     const lo = values.length ? values[0] : 1;
+    const max = values.length ? values[values.length - 1] : 1;
     const p95 = values.length ? values[Math.min(values.length - 1, Math.floor(values.length * 0.95))] : 1;
-    const hi = Math.max(lo, p95);
+    // When ≥95% of active days share the minimum, p95 == lo would flatten every day to one level.
+    const hi = p95 > lo ? p95 : max;
     const ticks = [];
     for (let level = 1; level <= LEVELS; level++) {
       // Smallest count that lands on this level (inverse of logLevel's rounding).
       const t = Math.max(0, (level - 1.5) / (LEVELS - 1));
-      ticks.push(level === 1 ? lo : Math.max(lo, Math.ceil(lo * Math.exp(t * Math.log(hi / lo)))));
+      ticks.push(level === 1 ? lo : Math.max(lo, Math.ceil(lo * Math.exp(t * Math.log(hi / lo)) - 1e-9)));
     }
-    return { mode: "range", lo, hi, max: values.length ? values[values.length - 1] : 0, ticks, levelOf: (c) => (c ? logLevel(c, lo, hi) : 0) };
+    return { mode: "range", lo, hi, max, ticks, levelOf: (c) => (c ? logLevel(c, lo, hi) : 0) };
   };
 
   const renderLegend = (scale) => {
@@ -436,6 +438,13 @@ const clientScript = (): string => `
     if (scale.mode === "month") {
       for (let level = 1; level <= LEVELS; level++) html += swatch(level);
       legendEl.innerHTML = '<span class="label">Each month: fewest</span>' + html + '<span class="label">most commits/day</span>';
+      return;
+    }
+    if (scale.hi <= scale.lo) {
+      // Every active day has the same count: logLevel draws them all at the middle level.
+      const mid = Math.ceil(LEVELS / 2);
+      html += '<div class="tick" title="' + scale.lo + ' commits">' + swatch(mid) + "<span>" + scale.lo + "</span></div>";
+      legendEl.innerHTML = '<span class="label">Commits/day</span>' + html;
       return;
     }
     // Numeric ticks; drop repeated values (small ranges) so labels stay readable.
