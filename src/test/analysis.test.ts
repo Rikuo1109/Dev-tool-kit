@@ -4,6 +4,7 @@ import { lineAt, countLoc } from '../shared/code-parser/textMetrics';
 import { isReexportOnlyBarrel } from '../shared/javascript/barrelFiles';
 import { resolveImport, TsConfigContext } from '../shared/javascript/importGraph';
 import { parsePythonImportBindings } from '../shared/python/graph';
+import { createJavaEntryAnnotationMatcher } from '../shared/java/entryPoints';
 
 const NO_ALIASES: TsConfigContext = {
     baseUrl: '',
@@ -247,5 +248,48 @@ suite('Barrel file re-exports — export { foo } from pattern', () => {
 
         assert.deepStrictEqual(findTargets(barrelB), ['./foo']);
         assert.deepStrictEqual(findTargets(barrelA), ['./barrel-b']);
+    });
+});
+
+suite('createJavaEntryAnnotationMatcher', () => {
+    const match = createJavaEntryAnnotationMatcher();
+
+    test('matches Spring stereotypes on the class', () => {
+        assert.strictEqual(
+            match('@RestController\n@RequestMapping("/api")\npublic class UserController {}'),
+            'RestController',
+        );
+        assert.strictEqual(
+            match('@Configuration(proxyBeanMethods = false)\nclass AppConfig {}'),
+            'Configuration',
+        );
+    });
+
+    test('matches method-level annotations', () => {
+        const source =
+            'public class Jobs {\n    @Scheduled(cron = "0 0 * * * *")\n    void run() {}\n}';
+        assert.strictEqual(match(source), 'Scheduled');
+        assert.strictEqual(
+            match('class Cfg {\n  @Bean\n  Foo foo() { return new Foo(); }\n}'),
+            'Bean',
+        );
+    });
+
+    test('matches fully-qualified annotations', () => {
+        assert.strictEqual(match('@org.springframework.stereotype.Service\nclass S {}'), 'Service');
+    });
+
+    test('ignores comments, strings and longer names', () => {
+        assert.strictEqual(match('// @Component\n/* @Service */\nclass A {}'), undefined);
+        assert.strictEqual(match('class A { String s = "@Controller"; }'), undefined);
+        assert.strictEqual(match('@ComponentScan\n@ServiceLoaderX\nclass A {}'), undefined);
+    });
+
+    test('uses configured names, with or without @, plus @SpringBootApplication', () => {
+        const custom = createJavaEntryAnnotationMatcher(['@MyHandler', 'com.acme.Job']);
+        assert.strictEqual(custom('@MyHandler class A {}'), 'MyHandler');
+        assert.strictEqual(custom('@Job class A {}'), 'Job');
+        assert.strictEqual(custom('@Component class A {}'), undefined);
+        assert.strictEqual(custom('@SpringBootApplication class App {}'), 'SpringBootApplication');
     });
 });

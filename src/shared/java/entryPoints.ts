@@ -2,16 +2,70 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { JavaTypeIndex } from './graph';
 import { readFileSafe, walkForFile } from '../fs';
+import { stripJavaCommentsAndStrings } from '../code-parser';
 
 const POM_MAIN_CLASS_RE = /<mainClass>\s*([\w.]+)\s*<\/mainClass>/g;
 const GRADLE_MAIN_CLASS_RE = /mainClass(?:Name)?\s*=?\s*['"]([\w.]+)['"]/g;
+
+/**
+ * Annotations that make a class framework-managed (Spring, JAX-RS, Micronaut, Quarkus/CDI): the
+ * container instantiates it by classpath scanning, so nothing has to import it. Method-level ones
+ * (`@Bean`, `@Scheduled`, listeners) mark the declaring class the same way.
+ */
+export const DEFAULT_JAVA_ENTRY_ANNOTATIONS = [
+    'SpringBootApplication',
+    'RestController',
+    'Controller',
+    'ControllerAdvice',
+    'RestControllerAdvice',
+    'Configuration',
+    'Component',
+    'Service',
+    'Repository',
+    'Aspect',
+    'SpringBootTest',
+    'WebMvcTest',
+    'Bean',
+    'Scheduled',
+    'EventListener',
+    'KafkaListener',
+    'RabbitListener',
+    'JmsListener',
+    'Path',
+    'Singleton',
+    'ApplicationScoped',
+];
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Builds a matcher for `@Name` / `@pkg.Name` outside comments and strings. Names may be given
+ * with or without the leading `@`; `@SpringBootApplication` is always included.
+ */
+export const createJavaEntryAnnotationMatcher = (
+    annotations: readonly string[] = DEFAULT_JAVA_ENTRY_ANNOTATIONS,
+): ((content: string) => string | undefined) => {
+    const names = new Set(['SpringBootApplication']);
+    for (const raw of annotations) {
+        const name = raw.trim().replace(/^@/, '');
+        if (/^[\w.$]+$/.test(name)) {
+            names.add(name.slice(name.lastIndexOf('.') + 1));
+        }
+    }
+    const pattern = new RegExp(
+        `@(?:[\\w$]+\\s*\\.\\s*)*(${[...names].map(escapeRegExp).join('|')})(?![\\w$])`,
+    );
+    return (content) => pattern.exec(stripJavaCommentsAndStrings(content))?.[1];
+};
 
 export const discoverJavaEntryPoints = (
     workspaceRoot: string,
     javaFiles: string[],
     javaTypeIndex: JavaTypeIndex,
     getContent: (filePath: string) => string,
+    entryAnnotations: readonly string[] = DEFAULT_JAVA_ENTRY_ANNOTATIONS,
 ): string[] => {
+    const findEntryAnnotation = createJavaEntryAnnotationMatcher(entryAnnotations);
     const entries = new Set<string>();
 
     for (const fqn of findMainClassesFromBuildFiles(workspaceRoot)) {
@@ -22,8 +76,7 @@ export const discoverJavaEntryPoints = (
     }
 
     for (const filePath of javaFiles) {
-        const content = getContent(filePath);
-        if (/@SpringBootApplication\b/.test(content)) {
+        if (findEntryAnnotation(getContent(filePath))) {
             entries.add(filePath);
         }
     }

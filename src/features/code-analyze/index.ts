@@ -4,11 +4,7 @@ import { isPathInsideFolder, normalizePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
 import { ImportGraphBuilder } from '../../shared/javascript/importGraph';
 import { discoverBundlerEntries } from './dead-explorer/entryDiscovery';
-import {
-    DeadCodeAnalyzer,
-    getAnalyzeConfig,
-    getDeadCodeExplorerConfig,
-} from './deadCode';
+import { DeadCodeAnalyzer, getAnalyzeConfig, getDeadCodeExplorerConfig } from './deadCode';
 import { findLargeFiles, findLargeFunctions } from './largeUnits';
 import { CodeAnalyzePanel } from './panel';
 import { CodeAnalyzeReport, DeadItem, UnusedExportItem } from './types';
@@ -108,6 +104,7 @@ export const analyzeCodeInFolder = async (
                     workspaceFolder,
                     entryGlobs,
                     config.excludeGlobs,
+                    { javaEntryAnnotations: config.javaEntryAnnotations },
                 );
 
                 for (const entry of discovered.entries) {

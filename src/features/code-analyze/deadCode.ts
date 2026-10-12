@@ -13,6 +13,7 @@ import {
     UnusedExportItem,
 } from './types';
 import { lineAt, scriptContent } from '../../shared/code-parser';
+import { DEFAULT_JAVA_ENTRY_ANNOTATIONS } from '../../shared/java/entryPoints';
 
 const DEFAULT_ENTRY_GLOBS = [
     '**/main.{ts,tsx,js,jsx}',
@@ -56,6 +57,9 @@ export const getAnalyzeConfig = (): CodeAnalyzeConfig => {
     return {
         entryGlobs: readArray('entryGlobs', DEFAULT_ENTRY_GLOBS),
         excludeGlobs: readArray('excludeGlobs', DEFAULT_EXCLUDE_GLOBS),
+        javaEntryAnnotations: config.get<string[]>('javaEntryAnnotations', [
+            ...DEFAULT_JAVA_ENTRY_ANNOTATIONS,
+        ]),
         largeFileLoc: config.get<number>('largeFileLoc', 300),
         largeFunctionLoc: config.get<number>('largeFunctionLoc', 80),
         largeFunctionParams: config.get<number>('largeFunctionParams', 5),
@@ -412,9 +416,7 @@ export class DeadCodeAnalyzer {
         return exports;
     }
 
-    private collectJavaScriptExportUsage(
-        modulePath: string,
-    ): {
+    private collectJavaScriptExportUsage(modulePath: string): {
         named: Set<string>;
         defaultImport: boolean;
         namespaceImports: boolean;

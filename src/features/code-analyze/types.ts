@@ -1,12 +1,5 @@
 export type DeadBucket =
-    | 'dead'
-    | 'likely-dead'
-    | 'runtime'
-    | 'entry'
-    | 'tooling'
-    | 'ambient'
-    | 'vendor'
-    | 'unknown';
+    'dead' | 'likely-dead' | 'runtime' | 'entry' | 'tooling' | 'ambient' | 'vendor' | 'unknown';
 
 export type DeadConfidence = 'high' | 'medium' | 'low';
 
@@ -112,6 +105,7 @@ export interface CodeAnalyzeReport {
 export interface CodeAnalyzeConfig {
     entryGlobs: string[];
     excludeGlobs: string[];
+    javaEntryAnnotations: string[];
     largeFileLoc: number;
     largeFunctionLoc: number;
     largeFunctionParams: number;
