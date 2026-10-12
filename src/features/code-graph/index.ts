@@ -1,54 +1,152 @@
+import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { formatFilesForAi } from '../../shared/aiFormat';
+import { ANALYZE_SOURCE_GLOB } from '../../shared/constants';
 import { normalizePath, toRelativePath } from '../../shared/fs';
 import { isDarkTheme } from '../../shared/html';
-import { getCachedImportIndex } from '../../shared/importIndexCache';
 import { ImportIndex } from '../../shared/javascript/importGraph';
 import { openFileInEditor } from '../../shared/openInEditor';
+import { ClusterModel } from './clusterGraph';
+import { getClusterGraphHtml } from './clusterPanel';
+import { groupDirOf, GroupMode } from './groupTree';
+import { GraphInsights } from './insights';
 import { getCodeGraphHtml, getCodeGraphLoadingHtml } from './panel';
-import { CodeGraphData, GraphEdge, GraphExpansion, GraphNode } from './types';
+import {
+    ClusterLevel,
+    CodeGraphData,
+    FileUsage,
+    GraphEdge,
+    GraphExpansion,
+    GraphNode,
+    LevelInsights,
+} from './types';
 
 export type { CodeGraphData, GraphExpansion } from './types';
 
-const buildCodeGraph = async (
-    fileUri: vscode.Uri,
-    onProgress?: (message: string) => void,
-): Promise<CodeGraphData> => {
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-    if (!workspaceFolder) {
-        throw new Error('File is not inside a workspace folder');
+/** Ask before copying more than this many characters (~250k tokens). */
+const LARGE_COPY_CHARS = 1_000_000;
+const STALE_DEBOUNCE_MS = 500;
+
+const indexFileSets = new WeakMap<ImportIndex, Set<string>>();
+
+/** Files the graph knows about: everything the index scanned (tests included). */
+const isIndexed = (index: ImportIndex, filePath: string): boolean => {
+    let files = indexFileSets.get(index);
+    if (!files) {
+        files = new Set(index.files);
+        indexFileSets.set(index, files);
     }
-
-    const workspaceRoot = workspaceFolder.uri.fsPath;
-    const normalizedTarget = normalizePath(fileUri.fsPath);
-
-    onProgress?.('Analyzing imports…');
-
-    const index = await getOrBuildIndex(workspaceFolder);
-    const dependencies = collectDependencies(normalizedTarget, workspaceRoot, index);
-
-    onProgress?.('Finding dependents…');
-
-    const dependents = findDependents(normalizedTarget, workspaceRoot, index);
-
-    return toGraphData(normalizedTarget, workspaceRoot, dependencies, dependents);
+    return files.has(normalizePath(filePath));
 };
 
-const expandGraphNode = async (fileUri: vscode.Uri, nodePath: string): Promise<GraphExpansion> => {
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-    if (!workspaceFolder) {
-        throw new Error('File is not inside a workspace folder');
+/**
+ * Code Graph keeps its own index slot: unlike Code Analyze it includes test files, so tests show
+ * up as dependents. `force` rebuilds instead of reusing the 5-minute cache.
+ */
+const getOrBuildIndex = async (
+    workspaceFolder: vscode.WorkspaceFolder,
+    force = false,
+): Promise<ImportIndex> => {
+    const { buildImportIndex } = await import('../../shared/javascript/importGraph.js');
+    const { getAnalyzeConfig, getDeadCodeExplorerConfig } =
+        await import('../code-analyze/deadCode.js');
+    const config = getAnalyzeConfig();
+    const explorerConfig = getDeadCodeExplorerConfig();
+    const entryGlobs = [...config.entryGlobs, ...explorerConfig.entryGlobs];
+    return buildImportIndex(workspaceFolder, entryGlobs, [], {
+        cacheKey: `${workspaceFolder.uri.fsPath}::code-graph`,
+        force,
+        javaEntryAnnotations: config.javaEntryAnnotations,
+    });
+};
+
+// ─── Focus view (one file, its dependencies and dependents) ─────────────────
+
+const collectDependencies = (
+    filePath: string,
+    workspaceRoot: string,
+    index: ImportIndex,
+): Map<string, string> => {
+    const normalizedTarget = normalizePath(filePath);
+    const dependencies = new Map<string, string>();
+
+    for (const imp of index.getImports(normalizedTarget)) {
+        if (!imp.resolvedPath) {
+            continue;
+        }
+        if (imp.resolvedPath !== normalizedTarget && isIndexed(index, imp.resolvedPath)) {
+            dependencies.set(imp.resolvedPath, toRelativePath(imp.resolvedPath, workspaceRoot));
+        }
     }
 
-    const workspaceRoot = workspaceFolder.uri.fsPath;
+    return dependencies;
+};
+
+const findDependents = (
+    normalizedTarget: string,
+    workspaceRoot: string,
+    index: ImportIndex,
+): Map<string, string> => {
+    const dependents = new Map<string, string>();
+
+    for (const importerPath of index.getImporters(normalizedTarget)) {
+        const importerNorm = normalizePath(importerPath);
+        if (importerNorm !== normalizedTarget && isIndexed(index, importerNorm)) {
+            dependents.set(importerNorm, toRelativePath(importerNorm, workspaceRoot));
+        }
+    }
+
+    return dependents;
+};
+
+const buildFocusGraph = (targetPath: string, index: ImportIndex): CodeGraphData => {
+    const workspaceRoot = index.workspaceRoot;
+    const normalizedTarget = normalizePath(targetPath);
+    const dependencies = collectDependencies(normalizedTarget, workspaceRoot, index);
+    const dependents = findDependents(normalizedTarget, workspaceRoot, index);
+
+    const nodes: GraphNode[] = [];
+    const edges: GraphEdge[] = [];
+    const nodeIds = new Set<string>();
+
+    const addNode = (id: string, label: string, group: GraphNode['group']) => {
+        if (nodeIds.has(id)) {
+            return;
+        }
+        nodeIds.add(id);
+        nodes.push({ id, label, group });
+    };
+
+    const targetLabel = toRelativePath(normalizedTarget, workspaceRoot);
+    addNode(normalizedTarget, targetLabel, 'current');
+
+    for (const [depPath, rel] of dependencies) {
+        addNode(depPath, rel, 'dependency');
+        edges.push({ from: normalizedTarget, to: depPath });
+    }
+
+    for (const [depPath, rel] of dependents) {
+        addNode(depPath, rel, 'dependent');
+        edges.push({ from: depPath, to: normalizedTarget });
+    }
+
+    return {
+        fileName: path.basename(normalizedTarget),
+        relativePath: targetLabel,
+        rootPath: normalizedTarget,
+        nodes,
+        edges,
+        stats: {
+            dependencies: dependencies.size,
+            dependents: dependents.size,
+        },
+    };
+};
+
+const expandFocusNode = (nodePath: string, index: ImportIndex): GraphExpansion => {
+    const workspaceRoot = index.workspaceRoot;
     const normalizedCenter = normalizePath(nodePath);
-
-    if (!isInSrcFolder(normalizedCenter, workspaceRoot)) {
-        return { centerPath: normalizedCenter, nodes: [], edges: [] };
-    }
-
-    const index = await getOrBuildIndex(workspaceFolder);
     const dependencies = collectDependencies(normalizedCenter, workspaceRoot, index);
     const dependents = findDependents(normalizedCenter, workspaceRoot, index);
 
@@ -71,205 +169,473 @@ const expandGraphNode = async (fileUri: vscode.Uri, nodePath: string): Promise<G
     return { centerPath: normalizedCenter, nodes, edges };
 };
 
-const getOrBuildIndex = async (workspaceFolder: vscode.WorkspaceFolder): Promise<ImportIndex> => {
-    const cached = getCachedImportIndex(workspaceFolder.uri.fsPath);
-    if (cached) {
-        return cached;
-    }
-    const { buildImportIndex } = await import('../../shared/javascript/importGraph.js');
-    const { getAnalyzeConfig, getDeadCodeExplorerConfig } =
-        await import('../code-analyze/deadCode.js');
-    const config = getAnalyzeConfig();
-    const explorerConfig = getDeadCodeExplorerConfig();
-    const entryGlobs = [...config.entryGlobs, ...explorerConfig.entryGlobs];
-    return buildImportIndex(workspaceFolder, entryGlobs, config.excludeGlobs);
+// ─── Panel ──────────────────────────────────────────────────────────────────
+
+const errorText = (error: unknown, fallback: string): string => {
+    return error instanceof Error ? error.message : fallback;
 };
 
-const collectDependencies = (
-    filePath: string,
-    workspaceRoot: string,
-    index: ImportIndex,
-): Map<string, string> => {
-    const normalizedTarget = normalizePath(filePath);
-    const dependencies = new Map<string, string>();
+const isDirectory = async (fsPath: string): Promise<boolean> => {
+    try {
+        return (await fs.stat(fsPath)).isDirectory();
+    } catch {
+        return false;
+    }
+};
 
-    for (const imp of index.getImports(filePath)) {
-        if (!imp.resolvedPath) {
+const MAX_HUBS = 40;
+const MAX_HUB_SYMBOLS = 30;
+const MAX_UNUSED_LISTED = 300;
+
+const dirOf = (rel: string): string => path.posix.dirname(rel);
+
+/** Adds usage facts (dead files, hubs) to a level built by the cluster model. */
+export const decorateLevel = (
+    level: ClusterLevel,
+    model: ClusterModel,
+    insights: GraphInsights,
+) => {
+    const relOf = (abs: string) => model.relOf(abs) ?? abs;
+
+    for (const node of level.nodes) {
+        const abs = model.absOf(node.id);
+        if (abs) {
+            node.fanIn = insights.fanInOf(abs);
+            node.usage = insights.flagOf(abs);
             continue;
         }
-        if (
-            imp.resolvedPath !== normalizedTarget &&
-            isInSrcFolder(imp.resolvedPath, workspaceRoot)
-        ) {
-            dependencies.set(imp.resolvedPath, toRelativePath(imp.resolvedPath, workspaceRoot));
+        if (node.kind !== 'cluster') {
+            continue;
+        }
+        let unusedCount = 0;
+        let top: { abs: string; fanIn: number } | undefined;
+        for (const file of model.filesUnder(node.id)) {
+            if (insights.flagOf(file) === 'unused') {
+                unusedCount++;
+            }
+            const fanIn = insights.fanInOf(file);
+            if (!top || fanIn > top.fanIn) {
+                top = { abs: file, fanIn };
+            }
+        }
+        node.unusedCount = unusedCount;
+        if (top && top.fanIn > 1) {
+            node.topHub = { label: path.posix.basename(relOf(top.abs)), fanIn: top.fanIn };
         }
     }
 
-    return dependencies;
-};
+    const scoped = model.filesUnder(level.path);
+    const item = (abs: string, count?: number) => ({
+        id: relOf(abs),
+        label: relOf(abs),
+        path: abs,
+        count,
+    });
+    const byPath = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
 
-const findDependents = (
-    normalizedTarget: string,
-    workspaceRoot: string,
-    index: ImportIndex,
-): Map<string, string> => {
-    const dependents = new Map<string, string>();
-
-    for (const importerPath of index.getImporters(normalizedTarget)) {
-        const importerNorm = normalizePath(importerPath);
-        if (importerNorm !== normalizedTarget && isInSrcFolder(importerNorm, workspaceRoot)) {
-            dependents.set(importerNorm, toRelativePath(importerNorm, workspaceRoot));
-        }
-    }
-
-    return dependents;
-};
-
-const isInSrcFolder = (absolutePath: string, workspaceRoot: string): boolean => {
-    const relative = toRelativePath(normalizePath(absolutePath), workspaceRoot).replace(/\\/g, '/');
-    return relative === 'src' || relative.startsWith('src/');
-};
-
-const toGraphData = (
-    targetPath: string,
-    workspaceRoot: string,
-    dependencies: Map<string, string>,
-    dependents: Map<string, string>,
-): CodeGraphData => {
-    const nodes: GraphNode[] = [];
-    const edges: GraphEdge[] = [];
-    const nodeIds = new Set<string>();
-
-    const addNode = (id: string, label: string, group: GraphNode['group']) => {
-        if (nodeIds.has(id)) {
-            return;
-        }
-        nodeIds.add(id);
-        nodes.push({ id, label, group });
+    const insightsForLevel: LevelInsights = {
+        unused: scoped
+            .filter((abs) => insights.flagOf(abs) === 'unused')
+            .map((abs) => item(abs))
+            .sort(byPath)
+            .slice(0, MAX_UNUSED_LISTED),
+        testOnly: scoped
+            .filter((abs) => insights.flagOf(abs) === 'test-only')
+            .map((abs) => item(abs))
+            .sort(byPath)
+            .slice(0, MAX_UNUSED_LISTED),
+        hubs: scoped
+            .map((abs) => ({ abs, fanIn: insights.fanInOf(abs) }))
+            .filter(({ fanIn }) => fanIn > 1)
+            .sort((a, b) => b.fanIn - a.fanIn)
+            .slice(0, MAX_HUBS)
+            .map(({ abs, fanIn }) => ({
+                ...item(abs, fanIn),
+                spread: new Set(insights.importersOf(abs).map((imp) => dirOf(relOf(imp)))).size,
+            })),
+        hubSymbols: scoped
+            .flatMap((abs) =>
+                insights
+                    .symbolsOf(abs)
+                    .filter((symbol) => symbol.name !== 'default' && symbol.users > 1)
+                    .map((symbol) => ({
+                        id: relOf(abs),
+                        label: symbol.name,
+                        path: abs,
+                        count: symbol.users,
+                    })),
+            )
+            .sort((a, b) => b.count - a.count)
+            .slice(0, MAX_HUB_SYMBOLS),
     };
+    level.insights = insightsForLevel;
+    return level;
+};
 
-    const targetLabel = toRelativePath(targetPath, workspaceRoot);
-    addNode(targetPath, targetLabel, 'current');
-
-    for (const [depPath, rel] of dependencies) {
-        addNode(depPath, rel, 'dependency');
-        edges.push({ from: targetPath, to: depPath });
-    }
-
-    for (const [depPath, rel] of dependents) {
-        addNode(depPath, rel, 'dependent');
-        edges.push({ from: depPath, to: targetPath });
-    }
-
+export const fileUsageOf = (
+    abs: string,
+    model: ClusterModel,
+    insights: GraphInsights,
+): FileUsage => {
+    const relOf = (file: string) => model.relOf(file) ?? file;
     return {
-        fileName: path.basename(targetPath),
-        relativePath: targetLabel,
-        rootPath: targetPath,
-        nodes,
-        edges,
-        stats: {
-            dependencies: dependencies.size,
-            dependents: dependents.size,
-        },
+        fanIn: insights.fanInOf(abs),
+        spread: new Set(insights.importersOf(abs).map((imp) => dirOf(relOf(imp)))).size,
+        usage: insights.flagOf(abs),
+        symbols: insights.symbolsOf(abs),
+        namespaceUsers: insights.namespaceUsersOf(abs),
+        unusedExports: insights
+            .unusedExportsOf(abs)
+            .map((exp) => ({ name: exp.exportName, kind: exp.kind, line: exp.line })),
     };
 };
 
-export const openCodeGraph = async (fileUri: vscode.Uri): Promise<void> => {
-    const fileName = path.basename(fileUri.fsPath);
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-    const relativePath = workspaceFolder
-        ? toRelativePath(fileUri.fsPath, workspaceFolder.uri.fsPath)
-        : fileName;
+/** Real folder path → the folder id groups use (JVM source roots are dropped). */
+const groupFolder = (dir: string): string => (dir ? groupDirOf(`${dir}/_`) : '');
+
+const stringArray = (value: unknown): string[] => {
+    return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string')
+        : [];
+};
+
+/**
+ * Opens the folder-cluster graph positioned at `uri` (a file is selected inside its folder,
+ * a folder is entered). "Focus graph" switches the same panel to the single-file view.
+ */
+export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): Promise<void> => {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+    if (!workspaceFolder) {
+        throw new Error('File is not inside a workspace folder');
+    }
+
+    const workspaceRoot = workspaceFolder.uri.fsPath;
+    const targetName = path.basename(uri.fsPath) || workspaceFolder.name;
+    const visRoot = vscode.Uri.joinPath(extensionUri, 'media');
 
     const panel = vscode.window.createWebviewPanel(
         'kyoToolsCodeGraph',
-        `Code Graph — ${fileName}`,
+        `Code Graph — ${targetName}`,
         vscode.ViewColumn.One,
-        { enableScripts: true, retainContextWhenHidden: true },
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [visRoot] },
     );
 
-    const showLoading = (status?: string) => {
-        panel.webview.html = getCodeGraphLoadingHtml(relativePath, isDarkTheme(), status);
-    };
+    const assets = () => ({
+        visScriptUri: panel.webview
+            .asWebviewUri(vscode.Uri.joinPath(visRoot, 'vis-network.min.js'))
+            .toString(),
+        cspSource: panel.webview.cspSource,
+    });
 
-    showLoading();
+    let index: ImportIndex | undefined;
+    let model: ClusterModel | undefined;
+    let insights: GraphInsights | undefined;
+    let mode: GroupMode = 'folders';
+    /** Models per grouping mode for the current index (community detection is built on demand). */
+    let models: Partial<Record<GroupMode, ClusterModel>> = {};
+    let showPackages = false;
+    /** Where the cluster view opens next: an absolute file or folder path. */
+    let clusterTarget = normalizePath(uri.fsPath);
+    let focusTarget: string | undefined;
+    let disposed = false;
 
-    const render = async () => {
-        showLoading();
-
-        try {
-            const data = await buildCodeGraph(fileUri, (message) => {
-                panel.webview.postMessage({ type: 'loadingStatus', message });
-            });
-
-            panel.webview.html = getCodeGraphHtml(data, isDarkTheme());
-        } catch (error) {
-            const errMessage =
-                error instanceof Error ? error.message : 'Failed to build code graph';
-            vscode.window.showErrorMessage(errMessage);
-            showLoading(errMessage);
+    const post = (message: unknown) => {
+        if (!disposed) {
+            void panel.webview.postMessage(message);
         }
     };
+
+    const ensureModel = async (force = false): Promise<ClusterModel> => {
+        if (force || !index) {
+            post({ type: 'loading', message: force ? 'Rebuilding index…' : 'Building index…' });
+            index = await getOrBuildIndex(workspaceFolder, force);
+            models = {};
+            post({ type: 'loading', message: 'Finding unused files and hubs…' });
+            insights = new GraphInsights(index);
+        }
+        if (!models[mode]) {
+            if (mode === 'communities') {
+                post({ type: 'loading', message: 'Detecting communities…' });
+            }
+            models[mode] = new ClusterModel(index, mode);
+        }
+        model = models[mode];
+        return model!;
+    };
+
+    /** The panel is showing every file at once; grouping-mode changes keep it that way. */
+    let fullView = false;
+
+    const sendFullMap = () => {
+        if (!model) {
+            return;
+        }
+        fullView = true;
+        const built = model.buildFullMap();
+        post({ type: 'level', level: insights ? decorateLevel(built, model, insights) : built });
+    };
+
+    const sendLevel = (level: string, focus?: string) => {
+        if (!model) {
+            return;
+        }
+        fullView = false;
+        const built = model.buildLevel(level, { showPackages, focus });
+        post({ type: 'level', level: insights ? decorateLevel(built, model, insights) : built });
+    };
+
+    const sendTarget = async (target: string) => {
+        const current = await ensureModel();
+        const rel = toRelativePath(target, workspaceRoot).replace(/\\/g, '/');
+        if (current.hasFile(target)) {
+            sendLevel(current.levelForFile(rel), rel);
+        } else if (await isDirectory(target)) {
+            sendLevel(current.levelForDir(groupFolder(rel === '.' ? '' : rel)));
+        } else {
+            // Not a source file the index knows (e.g. JSON): open its folder.
+            sendLevel(current.levelForDir(groupFolder(path.posix.dirname(rel))));
+        }
+    };
+
+    const showClusters = (target: string) => {
+        focusTarget = undefined;
+        clusterTarget = target;
+        panel.title = `Code Graph — ${path.basename(target) || workspaceFolder.name}`;
+        panel.webview.html = getClusterGraphHtml(
+            toRelativePath(target, workspaceRoot) || workspaceFolder.name,
+            isDarkTheme(),
+            assets(),
+        );
+    };
+
+    const showFocus = async (target: string, force = false) => {
+        focusTarget = target;
+        const relativePath = toRelativePath(target, workspaceRoot);
+        panel.title = `Code Graph — ${path.basename(target)}`;
+        panel.webview.html = getCodeGraphLoadingHtml(relativePath, isDarkTheme());
+        try {
+            if (force || !index) {
+                await ensureModel(force);
+            }
+            panel.webview.html = getCodeGraphHtml(
+                buildFocusGraph(target, index!),
+                isDarkTheme(),
+                assets(),
+            );
+        } catch (error) {
+            const message = errorText(error, 'Failed to build code graph');
+            vscode.window.showErrorMessage(message);
+            panel.webview.html = getCodeGraphLoadingHtml(relativePath, isDarkTheme(), message);
+        }
+    };
+
+    const copyContent = async (filePaths: string[]) => {
+        const { text, fileCount } = await formatFilesForAi(filePaths, workspaceRoot);
+        if (!text) {
+            void vscode.window.showWarningMessage('Could not read selected files for copy');
+            return;
+        }
+        if (text.length > LARGE_COPY_CHARS) {
+            const choice = await vscode.window.showWarningMessage(
+                `Copying ${fileCount} file(s), ~${Math.round(text.length / 4000)}k tokens. Copy anyway?`,
+                { modal: true },
+                'Copy',
+            );
+            if (choice !== 'Copy') {
+                return;
+            }
+        }
+        await vscode.env.clipboard.writeText(text);
+        void vscode.window.showInformationMessage(`Copied content of ${fileCount} file(s) for AI`);
+    };
+
+    // Flag the panel as stale when source files change; rebuilding is left to Reload.
+    const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(workspaceFolder, ANALYZE_SOURCE_GLOB),
+    );
+    let staleTimer: ReturnType<typeof setTimeout> | undefined;
+    const markStale = (changed: vscode.Uri) => {
+        if (!model || /[\\/](node_modules|dist|build|out|\.git)[\\/]/.test(changed.fsPath)) {
+            return;
+        }
+        clearTimeout(staleTimer);
+        staleTimer = setTimeout(() => post({ type: 'stale' }), STALE_DEBOUNCE_MS);
+    };
+    watcher.onDidChange(markStale);
+    watcher.onDidCreate(markStale);
+    watcher.onDidDelete(markStale);
+
+    panel.onDidDispose(() => {
+        disposed = true;
+        clearTimeout(staleTimer);
+        watcher.dispose();
+    });
 
     panel.webview.onDidReceiveMessage(async (message) => {
-        if (message.type === 'copy' && typeof message.text === 'string') {
-            await vscode.env.clipboard.writeText(message.text);
-            return;
-        }
-
-        if (message.type === 'copyContent' && Array.isArray(message.paths)) {
-            const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-            if (!workspaceFolder) {
-                return;
-            }
-
-            const paths = (message.paths as unknown[]).filter(
-                (value): value is string => typeof value === 'string',
-            );
-            const { text } = await formatFilesForAi(paths, workspaceFolder.uri.fsPath);
-
-            if (!text) {
-                void vscode.window.showWarningMessage('Could not read selected files for copy');
-                return;
-            }
-
-            await vscode.env.clipboard.writeText(text);
-            void vscode.window.showInformationMessage(
-                `Copied content of ${paths.length} file(s) for AI`,
-            );
-            return;
-        }
-
-        if (message.type === 'expand' && typeof message.path === 'string') {
-            try {
-                const expansion = await expandGraphNode(fileUri, message.path);
-                panel.webview.postMessage({ type: 'expandResult', ...expansion });
-            } catch (error) {
-                const errMessage = error instanceof Error ? error.message : 'Failed to expand node';
-                panel.webview.postMessage({
-                    type: 'expandError',
-                    path: message.path,
-                    message: errMessage,
-                });
-            }
-            return;
-        }
-
-        if (message.type === 'open' && typeof message.path === 'string') {
-            await openFileInEditor(message.path);
-            return;
-        }
-
-        if (message.type === 'reload') {
-            try {
-                await render();
-            } catch (error) {
-                const errMessage =
-                    error instanceof Error ? error.message : 'Failed to reload code graph';
-                vscode.window.showErrorMessage(errMessage);
-            }
+        try {
+            await handleMessage(message);
+        } catch (error) {
+            const text = errorText(error, 'Code graph action failed');
+            vscode.window.showErrorMessage(text);
+            post({ type: 'error', message: text });
         }
     });
 
-    await render();
+    const handleMessage = async (message: Record<string, unknown>) => {
+        switch (message?.type) {
+            // ── cluster view ──
+            case 'ready':
+                await sendTarget(clusterTarget);
+                return;
+            case 'navigate': {
+                await ensureModel();
+                const focus = typeof message.focus === 'string' ? message.focus : undefined;
+                sendLevel(typeof message.path === 'string' ? message.path : '', focus);
+                return;
+            }
+            case 'navigateFile':
+                if (typeof message.rel === 'string') {
+                    const current = await ensureModel();
+                    sendLevel(current.levelForFile(message.rel), message.rel);
+                }
+                return;
+            case 'navigateDir':
+                if (typeof message.dir === 'string') {
+                    const current = await ensureModel();
+                    sendLevel(current.levelForDir(groupFolder(message.dir)));
+                }
+                return;
+            case 'packages':
+                showPackages = message.show === true;
+                return;
+            case 'fullMap':
+                await ensureModel();
+                sendFullMap();
+                return;
+            case 'mode': {
+                mode = message.mode === 'communities' ? 'communities' : 'folders';
+                const current = await ensureModel();
+                // The full map is recoloured by the new grouping instead of leaving it.
+                if (fullView && typeof message.dir !== 'string') {
+                    sendFullMap();
+                    return;
+                }
+                // Keep the selected file in view across modes when there is one.
+                const focus = typeof message.focus === 'string' ? message.focus : undefined;
+                if (focus && current.absOf(focus)) {
+                    sendLevel(current.levelForFile(focus), focus);
+                } else if (typeof message.dir === 'string') {
+                    sendLevel(current.levelForDir(groupFolder(message.dir)));
+                } else {
+                    sendLevel(current.rootLevel);
+                }
+                return;
+            }
+            case 'detail':
+                if (model && typeof message.path === 'string' && typeof message.id === 'string') {
+                    const detail = model.nodeDetail(message.path, message.id);
+                    if (detail.kind === 'file' && detail.absolutePath && insights) {
+                        detail.fileUsage = fileUsageOf(detail.absolutePath, model, insights);
+                    }
+                    post({ type: 'detail', detail });
+                }
+                return;
+            case 'edgeDetail':
+                if (
+                    model &&
+                    typeof message.path === 'string' &&
+                    typeof message.from === 'string' &&
+                    typeof message.to === 'string'
+                ) {
+                    post({
+                        type: 'edgeDetail',
+                        detail: model.edgeDetail(
+                            message.path,
+                            message.from,
+                            message.to,
+                            showPackages,
+                        ),
+                    });
+                }
+                return;
+            case 'search':
+                if (model && typeof message.query === 'string') {
+                    post({ type: 'searchResults', hits: model.search(message.query) });
+                }
+                return;
+            case 'openRel': {
+                const abs = typeof message.rel === 'string' ? model?.absOf(message.rel) : undefined;
+                if (abs) {
+                    await openFileInEditor(abs);
+                }
+                return;
+            }
+            case 'focusFile':
+                if (typeof message.path === 'string') {
+                    await showFocus(message.path);
+                }
+                return;
+            case 'copyPaths': {
+                const ids = stringArray(message.ids);
+                if (!model || !ids.length) {
+                    return;
+                }
+                const rels = ids
+                    .flatMap((id) => model!.filesUnder(id))
+                    .map((abs) => toRelativePath(abs, workspaceRoot));
+                await vscode.env.clipboard.writeText(rels.join('\n'));
+                void vscode.window.showInformationMessage(`Copied ${rels.length} path(s)`);
+                return;
+            }
+
+            // ── focus view ──
+            case 'clusters':
+                showClusters(typeof message.path === 'string' ? message.path : clusterTarget);
+                return;
+            case 'expand':
+                if (typeof message.path === 'string' && index) {
+                    post({ type: 'expandResult', ...expandFocusNode(message.path, index) });
+                }
+                return;
+            case 'copy':
+                if (typeof message.text === 'string') {
+                    await vscode.env.clipboard.writeText(message.text);
+                }
+                return;
+
+            // ── shared ──
+            case 'copyContent': {
+                if (Array.isArray(message.paths)) {
+                    await copyContent(stringArray(message.paths));
+                } else if (model) {
+                    await copyContent(
+                        stringArray(message.ids).flatMap((id) => model!.filesUnder(id)),
+                    );
+                }
+                return;
+            }
+            case 'open':
+                if (typeof message.path === 'string') {
+                    const line = typeof message.line === 'number' ? message.line : 0;
+                    await openFileInEditor(message.path, line);
+                }
+                return;
+            case 'reload':
+                if (focusTarget) {
+                    await showFocus(focusTarget, true);
+                    return;
+                }
+                await ensureModel(true);
+                if (fullView) {
+                    sendFullMap();
+                } else if (typeof message.path === 'string') {
+                    sendLevel(message.path);
+                } else {
+                    await sendTarget(clusterTarget);
+                }
+                return;
+        }
+    };
+
+    showClusters(clusterTarget);
 };

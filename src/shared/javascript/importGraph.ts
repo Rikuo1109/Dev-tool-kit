@@ -284,12 +284,22 @@ export const findReachableFiles = (index: ImportIndex, seeds: Set<string>): Set<
     return reachable;
 };
 
+export interface BuildImportIndexOptions {
+    /** Cache slot; indexes built with different globs must not share one. Defaults to the root. */
+    cacheKey?: string;
+    /** Skip the cache and rebuild (the result still replaces the cached entry). */
+    force?: boolean;
+    /** Java annotations that mark framework-managed classes as entry points. */
+    javaEntryAnnotations?: readonly string[];
+}
+
 export const buildImportIndex = async (
     workspaceFolder: vscode.WorkspaceFolder,
     entryGlobs: string[],
     excludeGlobs: string[],
+    options: BuildImportIndexOptions = {},
 ): Promise<ImportIndex> => {
-    return ImportGraphBuilder.build(workspaceFolder, entryGlobs, excludeGlobs);
+    return ImportGraphBuilder.build(workspaceFolder, entryGlobs, excludeGlobs, options);
 };
 
 export class ImportGraphBuilder {
@@ -317,16 +327,20 @@ export class ImportGraphBuilder {
         workspaceFolder: vscode.WorkspaceFolder,
         entryGlobs: string[],
         excludeGlobs: string[],
+        options: BuildImportIndexOptions = {},
     ): Promise<ImportIndex> {
         const workspaceRoot = workspaceFolder.uri.fsPath;
-        const cached = getCachedImportIndex(workspaceRoot);
+        const cacheKey = options.cacheKey ?? workspaceRoot;
+        const cached = options.force ? undefined : getCachedImportIndex(cacheKey);
         if (cached) {
             return cached;
         }
 
         const builder = new ImportGraphBuilder(workspaceRoot);
-        await builder.scan(workspaceFolder, entryGlobs, excludeGlobs);
-        return builder.toIndex();
+        await builder.scan(workspaceFolder, entryGlobs, excludeGlobs, options.javaEntryAnnotations);
+        const index = builder.toIndex();
+        setCachedImportIndex(cacheKey, index);
+        return index;
     }
 
     getDependencies(absPath: string): string[] {
@@ -368,6 +382,7 @@ export class ImportGraphBuilder {
         workspaceFolder: vscode.WorkspaceFolder,
         entryGlobs: string[],
         excludeGlobs: string[],
+        javaEntryAnnotations?: readonly string[],
     ): Promise<void> {
         const uris = await vscode.workspace.findFiles(
             new vscode.RelativePattern(workspaceFolder, ANALYZE_SOURCE_GLOB),
@@ -405,6 +420,7 @@ export class ImportGraphBuilder {
                 javaFiles,
                 this.javaTypeIndex,
                 this.getContent,
+                javaEntryAnnotations,
             ),
         )) {
             this.entryPoints.add(filePath);
@@ -463,7 +479,6 @@ export class ImportGraphBuilder {
             javaTypeIndex: this.javaTypeIndex,
         };
 
-        setCachedImportIndex(this.workspaceRoot, result);
         return result;
     }
 

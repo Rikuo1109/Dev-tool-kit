@@ -1956,6 +1956,11 @@ v8-to-istanbul@^9.0.0:
     "@types/istanbul-lib-coverage" "^2.0.1"
     convert-source-map "^2.0.0"
 
+vis-network@9.1.9:
+  version "9.1.9"
+  resolved "https://registry.yarnpkg.com/vis-network/-/vis-network-9.1.9.tgz#8159b34e7c1570150fcc9296213d2b88ed169394"
+  integrity sha512-Ft+hLBVyiLstVYSb69Q1OIQeh3FeUxHJn0WdFcq+BFPqs+Vq1ibMi2sb//cxgq1CP7PH4yOXnHxEH/B2VzpZYA==
+
 watchpack@^2.5.2:
   version "2.5.2"
   resolved "https://registry.yarnpkg.com/watchpack/-/watchpack-2.5.2.tgz#e12e82d84674266fc1c6dbfe38891b92ff0522ec"

@@ -51,6 +51,13 @@ const extensionConfig = {
                     from: path.join(__dirname, 'node_modules/chart.js/dist/chart.umd.min.js'),
                     to: path.join(__dirname, 'media/chart.umd.min.js'),
                 },
+                {
+                    from: path.join(
+                        __dirname,
+                        'node_modules/vis-network/standalone/umd/vis-network.min.js',
+                    ),
+                    to: path.join(__dirname, 'media/vis-network.min.js'),
+                },
             ],
         }),
     ],

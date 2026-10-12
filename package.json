@@ -51,6 +51,16 @@
                 "command": "kyo-tools.commitHeatmap",
                 "title": "Commit Heatmap",
                 "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.copyFileWithDeps",
+                "title": "Copy File with Dependencies for AI",
+                "category": "Kyo Tools"
+            },
+            {
+                "command": "kyo-tools.hotspots",
+                "title": "Hotspots",
+                "category": "Kyo Tools"
             }
         ],
         "configuration": {
@@ -80,6 +90,36 @@
                         "**/*Application.java"
                     ],
                     "description": "Glob patterns for entry points excluded from unused-file detection."
+                },
+                "kyo-tools.codeAnalyze.javaEntryAnnotations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "SpringBootApplication",
+                        "RestController",
+                        "Controller",
+                        "ControllerAdvice",
+                        "RestControllerAdvice",
+                        "Configuration",
+                        "Component",
+                        "Service",
+                        "Repository",
+                        "Aspect",
+                        "SpringBootTest",
+                        "WebMvcTest",
+                        "Bean",
+                        "Scheduled",
+                        "EventListener",
+                        "KafkaListener",
+                        "RabbitListener",
+                        "JmsListener",
+                        "Path",
+                        "Singleton",
+                        "ApplicationScoped"
+                    ],
+                    "description": "Java annotations (without @) that mark framework-managed classes (Spring, JAX-RS, Micronaut, Quarkus) as entry points, so Code Analyze and Code Graph don't report them unused. A file counts when the annotation appears anywhere outside comments/strings, e.g. on the class or on a @Bean/@Scheduled method. @SpringBootApplication is always included."
                 },
                 "kyo-tools.codeAnalyze.excludeGlobs": {
                     "type": "array",
@@ -148,6 +188,14 @@
                 {
                     "command": "kyo-tools.commitHeatmap",
                     "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.copyFileWithDeps",
+                    "when": "workspaceFolderCount != 0"
+                },
+                {
+                    "command": "kyo-tools.hotspots",
+                    "when": "workspaceFolderCount != 0"
                 }
             ],
             "explorer/context": [
@@ -180,6 +228,28 @@
                     "command": "kyo-tools.codeGraph",
                     "when": "!explorerResourceIsFolder",
                     "group": "2_z_kyoTools@1"
+                },
+                {
+                    "command": "kyo-tools.codeGraph",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@0"
+                },
+                {
+                    "command": "kyo-tools.hotspots",
+                    "when": "explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@6"
+                },
+                {
+                    "command": "kyo-tools.copyFileWithDeps",
+                    "when": "!explorerResourceIsFolder",
+                    "group": "2_z_kyoTools@2"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "kyo-tools.copyFileWithDeps",
+                    "when": "resourceScheme == file",
+                    "group": "2_z_kyoTools@1"
                 }
             ]
         }
@@ -209,6 +279,7 @@
         "ts-loader": "^9.6.2",
         "typescript": "^6.0.3",
         "typescript-eslint": "^8.61.1",
+        "vis-network": "9.1.9",
         "webpack": "^5.107.2",
         "webpack-cli": "^7.0.3"
     },

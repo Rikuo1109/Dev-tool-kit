@@ -4,3 +4,4 @@ node_modules
 .vscode-test/
 *.vsix
 media/chart.umd.min.js
+media/vis-network.min.js

@@ -1,23 +1,23 @@
 import { escapeHtml } from '../../shared/html';
 import {
-    PANEL_CSP_CDN,
     panelCompactToolbarStyles,
     panelDocument,
     panelLoadingStyles,
     panelToolbarBtnStyles,
+    panelWebviewCsp,
     reloadPanelScript,
 } from '../../shared/panel';
 import { getPanelTheme, PanelTheme } from '../../shared/theme';
 import { CodeGraphData } from './types';
 
-interface GraphTheme extends PanelTheme {
+export interface GraphTheme extends PanelTheme {
     dep: string;
     depSoft: string;
     dependent: string;
     dependentSoft: string;
 }
 
-const getGraphTheme = (isDark: boolean): GraphTheme => {
+export const getGraphTheme = (isDark: boolean): GraphTheme => {
     const base = getPanelTheme(isDark);
     return isDark
         ? {
@@ -36,8 +36,16 @@ const getGraphTheme = (isDark: boolean): GraphTheme => {
           };
 };
 
-const graphStyles = (t: GraphTheme): string => {
+export const graphStyles = (t: GraphTheme): string => {
     return `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: ${t.bg};
+      color: ${t.text};
+    }
+
     ${panelCompactToolbarStyles(t)}
     ${panelToolbarBtnStyles(t)}
     ${panelLoadingStyles(t)}
@@ -171,7 +179,16 @@ export const getCodeGraphLoadingHtml = (
     });
 };
 
-export const getCodeGraphHtml = (data: CodeGraphData, isDark: boolean): string => {
+export interface CodeGraphAssets {
+    visScriptUri: string;
+    cspSource: string;
+}
+
+export const getCodeGraphHtml = (
+    data: CodeGraphData,
+    isDark: boolean,
+    assets: CodeGraphAssets,
+): string => {
     const t = getGraphTheme(isDark);
 
     const legend = `
@@ -182,7 +199,7 @@ export const getCodeGraphHtml = (data: CodeGraphData, isDark: boolean): string =
 
     return panelDocument({
         title: 'Code Graph',
-        csp: PANEL_CSP_CDN,
+        csp: panelWebviewCsp(assets.cspSource),
         styles: graphStyles(t),
         body: `
   <div class="toolbar">
@@ -201,6 +218,7 @@ export const getCodeGraphHtml = (data: CodeGraphData, isDark: boolean): string =
         </select>
         <button type="button" class="toolbar-btn" id="copy-btn" disabled>Copy</button>
       </div>
+      <button type="button" class="toolbar-btn" id="clusters-btn" title="Show this file inside the folder graph">Clusters</button>
       <button type="button" class="toolbar-btn" id="reload-btn">Reload</button>
     </div>
   </div>
@@ -215,10 +233,14 @@ export const getCodeGraphHtml = (data: CodeGraphData, isDark: boolean): string =
     <div class="hint">Shift+click select · Copy or ⌘C · click expand · double-click open</div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <script src="${escapeHtml(assets.visScriptUri)}"></script>
   <script>
     const vscode = acquireVsCodeApi();
-    const graphData = ${JSON.stringify(data)};
+    const graphData = ${JSON.stringify(data).replace(/</g, '\\u003c')};
+
+    document.getElementById("clusters-btn")?.addEventListener("click", () => {
+      vscode.postMessage({ type: "clusters", path: graphData.rootPath });
+    });
 
     document.getElementById("reload-btn")?.addEventListener("click", (event) => {
       const btn = event.currentTarget;
