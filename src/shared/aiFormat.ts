@@ -106,13 +106,24 @@ export const formatFileBlockForAi = (relativePath: string, content: string): str
     return `${header}\n${body}${fence}`;
 };
 
-export const formatFilesForAi = async (
+export interface AiFileContent {
+    relativePath: string;
+    content: string;
+}
+
+export interface AiReadResult {
+    files: AiFileContent[];
+    skippedCount: number;
+}
+
+/** Reads files once (open buffers win over disk) so callers can format them several ways. */
+export const readFilesForAi = async (
     filePaths: string[],
     workspaceRoot: string,
     onProgress?: (done: number, total: number) => void,
-): Promise<AiFormatResult> => {
+): Promise<AiReadResult> => {
     const openDocs = indexOpenDocuments();
-    const blocks: string[] = [];
+    const files: AiFileContent[] = [];
     let skippedCount = 0;
 
     for (let i = 0; i < filePaths.length; i++) {
@@ -124,12 +135,39 @@ export const formatFilesForAi = async (
                 skippedCount++;
                 continue;
             }
-            const rel = toRelativePath(normalizePath(filePath), workspaceRoot);
-            blocks.push(formatFileBlockForAi(rel, content));
+            const relativePath = toRelativePath(normalizePath(filePath), workspaceRoot);
+            files.push({ relativePath, content });
         } catch {
             skippedCount++;
         }
     }
 
-    return { text: blocks.join('\n\n'), fileCount: blocks.length, skippedCount };
+    return { files, skippedCount };
+};
+
+/** Joins file blocks; `transform` rewrites each file's content (e.g. signatures only). */
+export const joinFilesForAi = (
+    files: AiFileContent[],
+    transform?: (file: AiFileContent) => string,
+): string => {
+    return files
+        .map((file) =>
+            formatFileBlockForAi(file.relativePath, transform ? transform(file) : file.content),
+        )
+        .join('\n\n');
+};
+
+export const formatFilesForAi = async (
+    filePaths: string[],
+    workspaceRoot: string,
+    onProgress?: (done: number, total: number) => void,
+): Promise<AiFormatResult> => {
+    const { files, skippedCount } = await readFilesForAi(filePaths, workspaceRoot, onProgress);
+    return { text: joinFilesForAi(files), fileCount: files.length, skippedCount };
+};
+
+/** Rough token estimate (~4 chars per token), formatted like `12k`. */
+export const estimateTokens = (chars: number): string => {
+    const tokens = Math.round(chars / 4);
+    return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : `${tokens}`;
 };

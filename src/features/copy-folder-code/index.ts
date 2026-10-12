@@ -1,7 +1,8 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { formatFilesForAi } from '../../shared/aiFormat';
+import { estimateTokens, joinFilesForAi, readFilesForAi } from '../../shared/aiFormat';
+import { toSignatures } from '../../shared/aiSignatures';
 import { normalizePath, toRelativePath } from '../../shared/fs';
 import { listGitVisibleFiles } from '../../shared/gitignore';
 
@@ -164,9 +165,38 @@ const formatSize = (chars: number): string => {
     return `${Math.max(1, Math.round(chars / 1024))} KB`;
 };
 
-const estimateTokens = (chars: number): string => {
-    const tokens = Math.round(chars / 4);
-    return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : `${tokens}`;
+export const formatSizeInfo = (chars: number): string => {
+    return `${formatSize(chars)}, ~${estimateTokens(chars)} tokens`;
+};
+
+interface CopyVariant extends vscode.QuickPickItem {
+    text: string;
+}
+
+/** Lets the user pick full source vs signatures-only, showing the cost of each up front. */
+const pickCopyVariant = async (
+    full: string,
+    signatures: string,
+    fileCount: number,
+): Promise<string | undefined> => {
+    if (full === signatures) {
+        return full;
+    }
+    const items: CopyVariant[] = [
+        {
+            label: 'Full source',
+            description: `${fileCount} file(s) — ${formatSizeInfo(full.length)}`,
+            text: full,
+        },
+        {
+            label: 'Signatures only',
+            description: formatSizeInfo(signatures.length),
+            detail: 'Imports, types and function/method signatures; bodies replaced with { … }',
+            text: signatures,
+        },
+    ];
+    const choice = await vscode.window.showQuickPick(items, { title: 'Copy for AI' });
+    return choice?.text;
 };
 
 export const copyFolderCode = async (folderUri: vscode.Uri): Promise<void> => {
@@ -191,14 +221,14 @@ export const copyFolderCode = async (folderUri: vscode.Uri): Promise<void> => {
             }
 
             let lastReported = 0;
-            const formatted = await formatFilesForAi(collected.files, baseRoot, (done, total) => {
+            const read = await readFilesForAi(collected.files, baseRoot, (done, total) => {
                 const pct = Math.floor((done / Math.max(total, 1)) * 100);
                 if (pct > lastReported) {
                     progress.report({ increment: pct - lastReported, message: `${done}/${total}` });
                     lastReported = pct;
                 }
             });
-            return token.isCancellationRequested ? undefined : { collected, formatted };
+            return token.isCancellationRequested ? undefined : { collected, read };
         },
     );
 
@@ -206,18 +236,26 @@ export const copyFolderCode = async (folderUri: vscode.Uri): Promise<void> => {
         return;
     }
 
-    const { collected, formatted } = result;
-    if (!formatted.text) {
+    const { collected, read } = result;
+    if (read.files.length === 0) {
         void vscode.window.showWarningMessage(`No source files found to copy in ${folderLabel}.`);
         return;
     }
 
-    const chars = formatted.text.length;
-    const sizeInfo = `${formatSize(chars)}, ~${estimateTokens(chars)} tokens`;
+    const text = await pickCopyVariant(
+        joinFilesForAi(read.files),
+        joinFilesForAi(read.files, (file) => toSignatures(file.content, file.relativePath)),
+        read.files.length,
+    );
+    if (text === undefined) {
+        return;
+    }
 
-    if (chars > LARGE_COPY_CHARS) {
+    const sizeInfo = formatSizeInfo(text.length);
+
+    if (text.length > LARGE_COPY_CHARS) {
         const choice = await vscode.window.showWarningMessage(
-            `${folderLabel} produces a large clipboard payload: ${formatted.fileCount} file(s), ${sizeInfo}. Copy anyway?`,
+            `${folderLabel} produces a large clipboard payload: ${read.files.length} file(s), ${sizeInfo}. Copy anyway?`,
             { modal: true },
             'Copy',
         );
@@ -226,9 +264,9 @@ export const copyFolderCode = async (folderUri: vscode.Uri): Promise<void> => {
         }
     }
 
-    await vscode.env.clipboard.writeText(formatted.text);
+    await vscode.env.clipboard.writeText(text);
 
-    const skipped = formatted.skippedCount + collected.skippedLarge;
+    const skipped = read.skippedCount + collected.skippedLarge;
     const notes: string[] = [];
     if (skipped > 0) {
         notes.push(`skipped ${skipped} binary/large/unreadable`);
@@ -239,6 +277,6 @@ export const copyFolderCode = async (folderUri: vscode.Uri): Promise<void> => {
     const suffix = notes.length ? ` (${notes.join('; ')})` : '';
 
     void vscode.window.showInformationMessage(
-        `Copied ${formatted.fileCount} file(s) from ${folderLabel} for AI — ${sizeInfo}${suffix}`,
+        `Copied ${read.files.length} file(s) from ${folderLabel} for AI — ${sizeInfo}${suffix}`,
     );
 };
