@@ -1,6 +1,8 @@
 # Kyo Tools
 
-Code analysis and quality tools for Cursor & VS Code.
+Code analysis, visualization and AI-context tools for Cursor & VS Code: find unused and duplicate code, explore the import graph, see where commits and hotspots are, and copy the right code to an AI chat.
+
+All commands are under **Kyo Tools** in the command palette; most can also be run by right-clicking a file or folder in Explorer.
 
 ## Features
 
@@ -14,12 +16,6 @@ Scans a folder for code issues. Supports TypeScript, JavaScript, React, Python, 
 - **Copy for AI** — each duplicate block has a button to copy a refactor prompt for AI chat
 
 Thresholds are configurable via `kyo-tools.codeAnalyze.*` settings.
-
-### Pre-Merge Review
-
-Diff-only quality check before merging. Pick a branch to compare against — only scans added/changed lines since merge-base.
-
-Checks for `console.log`, `debugger`, `any` usage, commented-out code, unused imports, bare excepts, hardcoded secrets, new dependencies, and more across JS/TS, Python, and Java. Issues are grouped by file with click-to-jump. Severity: Critical, Warning, or Info.
 
 ### Code Graph
 
@@ -45,7 +41,10 @@ Import graph of the whole workspace, browsed folder by folder so it stays readab
 
 ### Code Dashboard
 
-Language stats, file size chart, and git change history (last 30 days).
+Language stats, file size chart, and git change history (`Code Dashboard`, or right-click a folder).
+
+- Works on a repo or on a folder containing several repos; inside nested repos, files ignored by that repo's `.gitignore` are not counted.
+- **Reload** is fast: line counts are cached per file (re-read only when its size or modified time changes) and git history is cached until `HEAD` changes. Scanning runs asynchronously, so the editor stays responsive.
 
 ### Commit Heatmap
 
@@ -55,7 +54,8 @@ GitHub-style calendar of commits for the whole project (`Kyo Tools: Commit Heatm
 - Range: last 3 / 6 / 12 months (default 12), all time, or a single year.
 - Author filter: all authors, **Only me** (your `git config user.email`), or any single author — your identity is listed first.
 - Stats for the selected range: total commits, active days, longest streak, busiest day, plus your current streak.
-- Hover a day for its count; click it to list that day's commits (repo, short hash, subject, author). Click a hash to copy it.
+- **Scale**: 9 colour levels on a log scale. _Per month_ (default) colours each calendar month from its quietest to its busiest active day; _Whole range_ uses one scale for everything visible (up to the 95th-percentile day, so a single huge day doesn't wash out the rest). The legend shows what the colours mean; your choice is remembered.
+- Hover a day for its exact count; click it to list that day's commits (repo, short hash, subject, author). Click a hash to copy it.
 - **Reload** only re-reads repos whose `HEAD` changed.
 
 ### Hotspots
@@ -71,7 +71,7 @@ Finds the files most worth refactoring: ones that change often **and** are compl
 ### Copy for AI
 
 - **Copy Folder Code for AI** (right-click a folder): respects `.gitignore`, skips binaries/lockfiles/generated files, then lets you pick **Full source** or **Signatures only** (imports, types and signatures; function bodies become `{ … }`) — each option shows its size and token estimate before copying.
-- **Copy File with Dependencies for AI** (right-click a file, editor context menu or command palette): copies a file together with its direct dependencies, all transitive dependencies, or direct dependencies + dependents, using the same import graph as Code Graph (incl. path aliases). Dependencies can be copied as signatures only while the target file stays complete.
+- **Copy with Related Files** (right-click a file, editor context menu or command palette): copies a file together with its direct dependencies, all transitive dependencies, or direct dependencies + dependents, using the same import graph as Code Graph (incl. path aliases). Dependencies can be copied as signatures only while the target file stays complete.
 
 ### Organize Imports
 

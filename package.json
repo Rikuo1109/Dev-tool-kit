@@ -54,7 +54,7 @@
             },
             {
                 "command": "kyo-tools.copyFileWithDeps",
-                "title": "Copy File with Dependencies for AI",
+                "title": "Copy with Related Files",
                 "category": "Kyo Tools"
             },
             {
