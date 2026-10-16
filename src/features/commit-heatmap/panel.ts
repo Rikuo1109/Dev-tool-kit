@@ -15,7 +15,7 @@ const hexToRgba = (hex: string, alpha: number): string => {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const LEVELS = 9;
+export const LEVELS = 9;
 
 const parseHex = (hex: string): [number, number, number] => {
     const v = hex.replace('#', '');
@@ -34,7 +34,7 @@ const mixHex = (from: string, to: string, amount: number): string => {
  * Nine solid colours with clearly increasing contrast against the panel background:
  * faint accent → accent → strong end (brighter on dark, deeper on light).
  */
-const levelColors = (t: PanelTheme, isDark: boolean): string[] => {
+export const levelColors = (t: PanelTheme, isDark: boolean): string[] => {
     const low = isDark ? mixHex(t.surface, t.accent, 0.22) : mixHex('#ffffff', t.accent, 0.14);
     const high = isDark ? mixHex(t.accent, '#ffffff', 0.62) : mixHex(t.accent, '#000000', 0.55);
     return Array.from({ length: LEVELS }, (_, i) => {

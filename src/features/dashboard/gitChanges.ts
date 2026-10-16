@@ -27,10 +27,45 @@ export interface UncommittedFile {
     net: number;
 }
 
+/** Commits per local weekday × hour: index = (isoWeekday - 1) * 24 + hour, Monday first. */
+export const HOURLY_CELLS = 7 * 24;
+
+export const emptyHourlyGrid = (): number[] => new Array<number>(HOURLY_CELLS).fill(0);
+
+/**
+ * Parses `git log --format=%ad --date=format-local:%u %H` output (one "weekday hour" line per commit,
+ * weekday 1 = Monday … 7 = Sunday) into a Monday-first weekday × hour commit grid.
+ * Lines that do not match are ignored.
+ */
+export const parseHourlyCommits = (output: string): number[] => {
+    const grid = emptyHourlyGrid();
+    for (const line of output.split('\n')) {
+        const match = /^([1-7]) (\d{2})$/.exec(line.trim());
+        if (!match) {
+            continue;
+        }
+        const hour = Number.parseInt(match[2], 10);
+        if (hour > 23) {
+            continue;
+        }
+        grid[(Number.parseInt(match[1], 10) - 1) * 24 + hour]++;
+    }
+    return grid;
+};
+
+/** Adds `from` into `into` cell by cell (used to merge nested repos). */
+export const addHourlyGrids = (into: number[], from: readonly number[]): void => {
+    for (let i = 0; i < HOURLY_CELLS; i++) {
+        into[i] += from[i] ?? 0;
+    }
+};
+
 export interface GitChangeStats {
     available: boolean;
     message?: string;
     days: GitDayChange[];
+    /** Commit counts per weekday × hour over `GitChangeAnalyzer.HOURLY_DAYS` days (see HOURLY_CELLS). */
+    hourly: number[];
     today: LineChangeStats;
     /** Net line delta from staged (index) + unstaged (working tree) changes. */
     uncommittedNet: number;
@@ -47,6 +82,7 @@ interface GitLogCacheEntry {
     head: string;
     todayKey: string;
     byDate: Map<string, DailyBucket>;
+    hourly: number[];
 }
 
 /**
@@ -59,6 +95,7 @@ interface GitDailyStats {
     available: boolean;
     message?: string;
     byDate: Map<string, DailyBucket>;
+    hourly: number[];
     today: LineChangeStats;
     uncommittedNet: number;
     uncommittedFiles: UncommittedFile[];
@@ -67,6 +104,8 @@ interface GitDailyStats {
 export class GitChangeAnalyzer {
     /** Days of committed history shown in the chart (one column per day, today included). */
     static readonly CHART_DAYS = 30;
+    /** Days of commit history behind the weekday × hour grid. */
+    static readonly HOURLY_DAYS = 90;
     static readonly UNCOMMITTED_FILE_LIMIT = 20;
     static readonly NUMSTAT_RE = /^(\d+|-)\t(\d+|-)\t/;
     static readonly NUMSTAT_FILE_RE = /^(\d+|-)\t(\d+|-)\t(.+)$/;
@@ -116,6 +155,8 @@ export class GitChangeAnalyzer {
 
         const mergedByDate = new Map<string, DailyBucket>();
         this.mergeDailyBuckets(mergedByDate, main.byDate);
+        const mergedHourly = emptyHourlyGrid();
+        addHourlyGrids(mergedHourly, main.hourly);
 
         const mergedFiles = new Map<string, UncommittedFile>();
         if (main.available) {
@@ -133,6 +174,7 @@ export class GitChangeAnalyzer {
             }
             anyAvailable = true;
             this.mergeDailyBuckets(mergedByDate, daily.byDate);
+            addHourlyGrids(mergedHourly, daily.hourly);
             const remapped = daily.uncommittedFiles.map((file) => ({
                 ...file,
                 relativePath:
@@ -150,6 +192,7 @@ export class GitChangeAnalyzer {
                 available: anyAvailable,
                 message: anyAvailable ? undefined : 'No git history available',
                 days: GitChangeAnalyzer.buildDailySeries(mergedByDate),
+                hourly: mergedHourly,
                 today: GitChangeAnalyzer.toLineStats(todayAdded, todayDeleted),
                 uncommittedNet: totalUncommitted,
                 uncommittedFiles: this.rankUncommittedFiles([...mergedFiles.values()]),
@@ -180,37 +223,48 @@ export class GitChangeAnalyzer {
         }
     }
 
-    /** `git log --numstat` buckets, served from cache when HEAD and the date are unchanged. */
-    private async readCommittedBuckets(
+    /**
+     * Committed history for one repo/scope, served from cache when HEAD and the date are unchanged:
+     * daily line buckets (`--numstat`, CHART_DAYS) and the weekday × hour commit grid (HOURLY_DAYS).
+     */
+    private async readCommittedHistory(
         gitRoot: string,
         scope: string,
-    ): Promise<Map<string, DailyBucket>> {
+    ): Promise<{ byDate: Map<string, DailyBucket>; hourly: number[] }> {
         const cacheKey = `${gitRoot}::${scope}`;
         const todayKey = GitChangeAnalyzer.localDateKey();
         const head = this.logCache ? await GitChangeAnalyzer.readHead(gitRoot) : null;
         const cached = this.logCache?.get(cacheKey);
         if (head && cached && cached.head === head && cached.todayKey === todayKey) {
-            return cached.byDate;
+            return { byDate: cached.byDate, hourly: cached.hourly };
         }
 
-        const args = [
-            'log',
-            `--since=${GitChangeAnalyzer.CHART_DAYS} days ago`,
-            '--format=%ad',
-            '--date=short',
-            '--numstat',
-            '--no-renames',
-        ];
+        const pathArgs = GitChangeAnalyzer.scopeArgs(scope);
+        const [numstat, hourlyLog] = await Promise.all([
+            GitChangeAnalyzer.runGit(gitRoot, [
+                'log',
+                `--since=${GitChangeAnalyzer.CHART_DAYS} days ago`,
+                '--format=%ad',
+                '--date=short',
+                '--numstat',
+                '--no-renames',
+                ...pathArgs,
+            ]),
+            GitChangeAnalyzer.runGit(gitRoot, [
+                'log',
+                `--since=${GitChangeAnalyzer.HOURLY_DAYS} days ago`,
+                '--format=%ad',
+                '--date=format-local:%u %H',
+                ...pathArgs,
+            ]),
+        ]);
 
-        if (scope && scope !== '.') {
-            args.push('--', scope);
-        }
-
-        const byDate = this.parseGitNumstat(await GitChangeAnalyzer.runGit(gitRoot, args));
+        const byDate = this.parseGitNumstat(numstat);
+        const hourly = parseHourlyCommits(hourlyLog);
         if (head) {
-            this.logCache?.set(cacheKey, { head, todayKey, byDate });
+            this.logCache?.set(cacheKey, { head, todayKey, byDate, hourly });
         }
-        return byDate;
+        return { byDate, hourly };
     }
 
     // ─── Private: Daily stats ─────────────────────────────────────────────────
@@ -226,6 +280,7 @@ export class GitChangeAnalyzer {
                 available: false,
                 message: 'Not inside a git repository',
                 byDate: emptyByDate,
+                hourly: emptyHourlyGrid(),
                 today: emptyToday,
                 uncommittedNet: 0,
                 uncommittedFiles: [],
@@ -236,8 +291,8 @@ export class GitChangeAnalyzer {
         const scope = path.relative(gitRoot, resolvedFolder).replace(/\\/g, '/');
 
         try {
-            const [byDate, uncommitted] = await Promise.all([
-                this.readCommittedBuckets(gitRoot, scope),
+            const [{ byDate, hourly }, uncommitted] = await Promise.all([
+                this.readCommittedHistory(gitRoot, scope),
                 this.getUncommittedChangesFor(gitRoot, scope, resolvedFolder),
             ]);
             const todayKey = GitChangeAnalyzer.localDateKey();
@@ -246,6 +301,7 @@ export class GitChangeAnalyzer {
             return {
                 available: true,
                 byDate,
+                hourly,
                 today: GitChangeAnalyzer.toLineStats(todayBucket.added, todayBucket.deleted),
                 uncommittedNet: uncommitted.net,
                 uncommittedFiles: uncommitted.files,
@@ -256,6 +312,7 @@ export class GitChangeAnalyzer {
                 available: false,
                 message,
                 byDate: emptyByDate,
+                hourly: emptyHourlyGrid(),
                 today: emptyToday,
                 uncommittedNet: 0,
                 uncommittedFiles: [],
@@ -482,6 +539,7 @@ export class GitChangeAnalyzer {
             available: daily.available,
             message: daily.message,
             days: GitChangeAnalyzer.buildDailySeries(daily.byDate),
+            hourly: daily.hourly,
             today: daily.today,
             uncommittedNet: daily.uncommittedNet,
             uncommittedFiles: this.rankUncommittedFiles(daily.uncommittedFiles),

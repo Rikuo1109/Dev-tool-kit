@@ -42,7 +42,7 @@ Import graph of the whole workspace, browsed folder by folder so it stays readab
 
 ### Code Dashboard
 
-Language stats (donut with top languages, collapsible full list), file size chart, and a daily git change chart for the last 30 days plus uncommitted files (`Code Dashboard`, or right-click a folder).
+Language stats (donut with top languages, collapsible full list), file size chart, a daily git change chart for the last 30 days, a weekday × hour commit grid for the last 90 days (local time, hover for counts), and uncommitted files (`Code Dashboard`, or right-click a folder).
 
 - Works on a repo or on a folder containing several repos; inside nested repos, files ignored by that repo's `.gitignore` are not counted.
 - **Reload** is fast: line counts are cached per file (re-read only when its size or modified time changes) and git history is cached until `HEAD` changes. Scanning runs asynchronously, so the editor stays responsive.

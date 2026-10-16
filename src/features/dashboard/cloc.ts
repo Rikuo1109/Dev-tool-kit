@@ -6,7 +6,16 @@ import {
     renderPanelHeader,
 } from '../../shared/panel';
 import { getPanelTheme } from '../../shared/theme';
+import { LEVELS, levelColors } from '../commit-heatmap/panel';
 import { GitChangeAnalyzer, GitChangeStats } from './gitChanges';
+import {
+    computeHourlyLevels,
+    formatHourRange,
+    formatUtcOffset,
+    hourlyWindowStart,
+    summarizeHourly,
+    WEEKDAY_LABELS,
+} from './hourlyGrid';
 
 interface ClocFileEntry {
     blank: number;
@@ -134,6 +143,7 @@ export const getDashboardHtml = (
             ? `
     <div class="uncommitted-card">
       <h3 class="uncommitted-title">Uncommitted files</h3>
+      <div class="uncommitted-scroll">
       <table class="top-files uncommitted-files">
         <thead>
           <tr>
@@ -159,6 +169,7 @@ export const getDashboardHtml = (
               .join('')}
         </tbody>
       </table>
+      </div>
     </div>`
             : git.uncommittedNet === 0
               ? `<div class="uncommitted-empty">Working tree clean — no staged or unstaged line changes.</div>`
@@ -188,6 +199,49 @@ export const getDashboardHtml = (
   </section>`
         : '';
 
+    const renderHourlyCard = (): string => {
+        const hourly = git.hourly ?? [];
+        const summary = summarizeHourly(hourly);
+        const scale = computeHourlyLevels(hourly, LEVELS);
+        const now = new Date();
+        const caption = `Commits by weekday and hour of day, last ${GitChangeAnalyzer.HOURLY_DAYS} days (since ${hourlyWindowStart(now, GitChangeAnalyzer.HOURLY_DAYS)}), local time ${formatUtcOffset(now.getTimezoneOffset())}. Merge commits and nested repos included.`;
+        if (summary.total === 0) {
+            return `
+    <div class="hourly-card">
+      <h2 class="card-title">Commits by hour of day</h2>
+      <div class="git-unavailable">No commits in the last ${GitChangeAnalyzer.HOURLY_DAYS} days.</div>
+      <p class="git-chart-note">${escapeHtml(caption)}</p>
+    </div>`;
+        }
+        const hourHeads = Array.from({ length: 24 }, (_, h) =>
+            `<div class="hm-head">${h % 3 === 0 ? String(h).padStart(2, '0') : ''}</div>`,
+        ).join('');
+        const rows = WEEKDAY_LABELS.map((day, d) => {
+            const cells = Array.from({ length: 24 }, (_, h) => {
+                const count = hourly[d * 24 + h] ?? 0;
+                const level = scale.levels[d * 24 + h];
+                const tip = `${day} ${formatHourRange(h)} — ${count.toLocaleString()} commit${count === 1 ? '' : 's'}`;
+                return `<div class="hm-cell hl${level}" title="${escapeHtml(tip)}"></div>`;
+            }).join('');
+            return `<div class="hm-day">${day}</div>${cells}`;
+        }).join('');
+        const b = summary.busiest;
+        const busiest = b
+            ? ` Busiest slot: ${WEEKDAY_LABELS[b.weekday]} ${formatHourRange(b.hour)} (${b.count.toLocaleString()}).`
+            : '';
+        const swatches = Array.from({ length: LEVELS }, (_, i) => `<span class="hm-cell hl${i + 1}"></span>`).join('');
+        return `
+    <div class="hourly-card">
+      <h2 class="card-title">Commits by hour of day</h2>
+      <div class="hm-grid">
+        <div></div>${hourHeads}
+        ${rows}
+      </div>
+      <div class="hm-legend"><span>${scale.lo}</span>${swatches}<span>${scale.hi}${scale.max > scale.hi ? '+' : ''}</span><span class="hm-total">${summary.total.toLocaleString()} commits.${escapeHtml(busiest)}</span></div>
+      <p class="git-chart-note">${escapeHtml(caption)}</p>
+    </div>`;
+    };
+
     const gitMainColumn = git.available
         ? `
     <div class="git-chart-card">
@@ -197,7 +251,7 @@ export const getDashboardHtml = (
       </div>
       <p class="git-chart-note">Each column is one day (lines added, deleted and net). From <code>git log --numstat</code> scoped to this folder.${data.subrepoCount > 0 ? ` Includes ${data.subrepoCount} subrepo(s).` : ''} Uncommitted net = index + working tree (staged + unstaged diff).</p>
     </div>
-    ${uncommittedTable}`
+    ${renderHourlyCard()}`
         : `
     <div class="git-unavailable">${escapeHtml(git.message ?? 'Git history unavailable')}</div>`;
 
@@ -254,6 +308,56 @@ export const getDashboardHtml = (
       position: relative;
       height: 270px;
     }
+
+    .hourly-card {
+      background: ${theme.surface};
+      border: 1px solid ${theme.border};
+      border-radius: 10px;
+      padding: 10px 12px 8px;
+      box-shadow: ${theme.shadow};
+    }
+
+    .hm-grid {
+      display: grid;
+      grid-template-columns: 30px repeat(24, minmax(0, 1fr));
+      gap: 2px;
+      align-items: center;
+    }
+
+    .hm-head, .hm-day {
+      font-size: 0.6rem;
+      color: ${theme.muted};
+      line-height: 1;
+    }
+
+    .hm-head { text-align: left; }
+
+    .hm-cell {
+      height: 18px;
+      border-radius: 3px;
+      background: ${theme.border};
+      opacity: 1;
+    }
+
+    .hm-cell.hl0 { background: ${theme.bg}; outline: 1px solid ${theme.border}; outline-offset: -1px; }
+${levelColors(theme, isDark)
+    .map((color, i) => `    .hm-cell.hl${i + 1} { background: ${color}; }`)
+    .join('\n')}
+    .hm-grid .hm-cell:hover { outline: 1px solid ${theme.text}; }
+
+    .hm-legend {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 8px;
+      font-size: 0.62rem;
+      color: ${theme.muted};
+    }
+
+    .hm-legend .hm-cell { width: 14px; height: 10px; flex-shrink: 0; }
+    .hm-legend span:first-child { margin-right: 3px; }
+    .hm-legend .hm-cell + span { margin-left: 3px; }
+    .hm-total { margin-left: auto; }
 
     .git-chart-card .card-title {
       margin-bottom: 4px;
@@ -314,24 +418,36 @@ export const getDashboardHtml = (
       display: grid;
       grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
       gap: 10px;
-      align-items: start;
+      align-items: stretch;
       margin-bottom: 12px;
     }
 
-    .col-main {
+    .col-main, .col-side {
       display: flex;
       flex-direction: column;
       gap: 10px;
       min-width: 0;
     }
 
-    .col-main .uncommitted-card,
-    .col-main .uncommitted-empty {
+    .col-side .uncommitted-card,
+    .col-side .uncommitted-empty {
       margin-bottom: 0;
     }
 
+    .uncommitted-scroll {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    /* Single column: columns dissolve so cards follow this order — git chart, languages, hourly, uncommitted. */
+    .git-chart-card, .git-unavailable { order: 1; }
+    .lang-card { order: 2; }
+    .hourly-card { order: 3; }
+    .uncommitted-card, .uncommitted-empty { order: 4; }
+
     @media (max-width: 900px) {
-      .dash-grid { grid-template-columns: 1fr; }
+      .dash-grid { grid-template-columns: 1fr; gap: 10px; }
+      .col-main, .col-side { display: contents; }
       .lang-body { grid-template-columns: 1fr; justify-items: center; }
       .lang-body .legend-list { width: 100%; }
     }
@@ -351,6 +467,18 @@ export const getDashboardHtml = (
       color: ${theme.muted};
       margin-bottom: 8px;
       font-weight: 600;
+    }
+
+    /* Fills the leftover column height so both columns end together; the content stays centred. */
+    .col-side .lang-card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .col-side .lang-body {
+      flex: 1;
+      align-content: center;
     }
 
     .lang-body {
@@ -576,6 +704,7 @@ export const getDashboardHtml = (
   <div class="dash-grid">
     <div class="col-main">${gitMainColumn}
     </div>
+    <div class="col-side">
     <div class="lang-card">
       <h2 class="card-title">Languages</h2>
       <div class="lang-body">
@@ -600,6 +729,8 @@ export const getDashboardHtml = (
       </details>`
               : ''
       }
+    </div>
+    ${uncommittedTable}
     </div>
   </div>
 
