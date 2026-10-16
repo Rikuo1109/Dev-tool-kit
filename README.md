@@ -35,13 +35,14 @@ Import graph of the whole workspace, browsed folder by folder so it stays readab
 - **Insights panel** — with nothing selected, the side panel lists the unused files, test-only files, most imported files (with how many folders import them) and most imported exports for the current group and below. A file's details show which of its exports are used by how many files, and which exports nothing imports (click to jump to the line).
 - **Full map** — _View: full map_ draws every file and import at once (up to 4,000 most connected files), coloured by top-level group and sized by importer count. Labels appear as you zoom in; with many imports, only the hovered or selected file's edges are drawn. Highlight, search and the insights panel work here too.
 - **Search** — find any file or folder and jump to it.
+- **Your own filter** — the toolbar box decides which files are in the graph. Comma- or space-separated patterns relative to the workspace root: `src/features/**` keeps a folder, `*.ts` any `.ts` file, a leading `!` excludes (`!**/*.test.*`, `!**/dist/**`), plain text like `auth` keeps paths containing it. Includes are OR-ed, excludes always win, empty shows everything. _Hide tests_ and _Importers: 1+/2+/5+_ are quick toggles. The filter is applied before clustering, so counts, cycles, unused/hub highlighting, the insights panel, search and the full map all describe the filtered files only (imports to or from hidden files are dropped, so a file imported only by hidden files shows up as unused). A `Filter: 128 of 1,340 files ✕` chip shows it is on; an invalid pattern shows an inline error and leaves the graph unchanged. The filter is remembered per workspace. The focus graph ignores it.
 - **Packages** — toggle to show external packages imported at the current level.
 - **Focus graph** — the classic single-file view (dependencies below, dependents above, click to expand).
 - Includes test files, supports `tsconfig`/`jsconfig` path aliases, works offline. **Reload** rebuilds the index; it is marked `•` when source files change.
 
 ### Code Dashboard
 
-Language stats, file size chart, and git change history (`Code Dashboard`, or right-click a folder).
+Language stats (donut with top languages, collapsible full list), file size chart, and a daily git change chart for the last 30 days plus uncommitted files (`Code Dashboard`, or right-click a folder).
 
 - Works on a repo or on a folder containing several repos; inside nested repos, files ignored by that repo's `.gitignore` are not counted.
 - **Reload** is fast: line counts are cached per file (re-read only when its size or modified time changes) and git history is cached until `HEAD` changes. Scanning runs asynchronously, so the editor stays responsive.

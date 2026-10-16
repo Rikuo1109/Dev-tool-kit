@@ -164,7 +164,7 @@ export const getDashboardHtml = (
               ? `<div class="uncommitted-empty">Working tree clean — no staged or unstaged line changes.</div>`
               : '';
 
-    const gitSection = git.available
+    const gitStatsSection = git.available
         ? `
   <section class="section-block">
     <div class="stats">
@@ -185,21 +185,50 @@ export const getDashboardHtml = (
         <div class="value">${formatDelta(git.uncommittedNet)}</div>
       </div>
     </div>
+  </section>`
+        : '';
 
-    ${uncommittedTable}
-
+    const gitMainColumn = git.available
+        ? `
     <div class="git-chart-card">
+      <h2 class="card-title">Committed lines — daily totals, last ${GitChangeAnalyzer.CHART_DAYS} days</h2>
       <div class="git-chart-wrap">
         <canvas id="git-chart"></canvas>
       </div>
-      <p class="git-chart-note">Committed lines from <code>git log --numstat</code> scoped to this folder. Net uncommitted = index + working tree (staged + unstaged diff).${data.subrepoCount > 0 ? ` Includes ${data.subrepoCount} subrepo(s).` : ''}</p>
+      <p class="git-chart-note">Each column is one day (lines added, deleted and net). From <code>git log --numstat</code> scoped to this folder.${data.subrepoCount > 0 ? ` Includes ${data.subrepoCount} subrepo(s).` : ''} Uncommitted net = index + working tree (staged + unstaged diff).</p>
     </div>
-  </section>`
+    ${uncommittedTable}`
         : `
-  <section class="section-block">
-    <h2>Git activity</h2>
-    <div class="git-unavailable">${escapeHtml(git.message ?? 'Git history unavailable')}</div>
-  </section>`;
+    <div class="git-unavailable">${escapeHtml(git.message ?? 'Git history unavailable')}</div>`;
+
+    // Top languages stay visible; the long tail is aggregated and listed in a collapsible, scrollable block.
+    const TOP_LANGUAGES = 8;
+    const OTHER_COLOR = '#64748b';
+    const langRows = data.languages.map((lang, i) => ({
+        name: lang.name,
+        nFiles: lang.nFiles,
+        code: lang.code,
+        color: chartColors[i],
+    }));
+    const topLangs = langRows.slice(0, TOP_LANGUAGES);
+    const restLangs = langRows.slice(TOP_LANGUAGES);
+    const otherLang = {
+        name: `Other (${restLangs.length} languages)`,
+        nFiles: restLangs.reduce((sum, l) => sum + l.nFiles, 0),
+        code: restLangs.reduce((sum, l) => sum + l.code, 0),
+        color: OTHER_COLOR,
+    };
+    const renderLangRow = (lang: { name: string; nFiles: number; code: number; color: string }) => {
+        const pct = data.totalCode > 0 ? ((lang.code / data.totalCode) * 100).toFixed(1) : '0';
+        return `
+          <div class="legend-item">
+            <span class="legend-dot" style="background: ${lang.color}"></span>
+            <span class="legend-name">${escapeHtml(lang.name)}</span>
+            <span class="legend-files">${lang.nFiles} files</span>
+            <span class="legend-code">${lang.code.toLocaleString()} (${pct}%)</span>
+          </div>`;
+    };
+    const donutLangs = restLangs.length > 0 ? [...topLangs, otherLang] : topLangs;
 
     const dashboardStyles = `
     ${panelContentStyles(theme)}
@@ -223,7 +252,11 @@ export const getDashboardHtml = (
 
     .git-chart-wrap {
       position: relative;
-      height: 200px;
+      height: 270px;
+    }
+
+    .git-chart-card .card-title {
+      margin-bottom: 4px;
     }
 
     .git-chart-note {
@@ -277,19 +310,33 @@ export const getDashboardHtml = (
       margin-bottom: 10px;
     }
 
-    .overview {
+    .dash-grid {
       display: grid;
-      grid-template-columns: minmax(220px, 280px) 1fr;
+      grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
       gap: 10px;
-      margin-bottom: 12px;
       align-items: start;
+      margin-bottom: 12px;
     }
 
-    @media (max-width: 820px) {
-      .overview { grid-template-columns: 1fr; }
+    .col-main {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
     }
 
-    .chart-card, .legend-card {
+    .col-main .uncommitted-card,
+    .col-main .uncommitted-empty {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 900px) {
+      .dash-grid { grid-template-columns: 1fr; }
+      .lang-body { grid-template-columns: 1fr; justify-items: center; }
+      .lang-body .legend-list { width: 100%; }
+    }
+
+    .lang-card {
       background: ${theme.surface};
       border: 1px solid ${theme.border};
       border-radius: 10px;
@@ -297,19 +344,70 @@ export const getDashboardHtml = (
       box-shadow: ${theme.shadow};
     }
 
-    .chart-card h2, .section-title {
+    .card-title, .section-title {
       font-size: 0.68rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: ${theme.muted};
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       font-weight: 600;
     }
 
-    .chart-wrap {
+    .lang-body {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+    }
+
+    .donut-wrap {
       position: relative;
-      max-width: 220px;
-      margin: 0 auto;
+      width: 150px;
+      height: 150px;
+    }
+
+    .donut-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .donut-total {
+      font-size: 0.95rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .donut-sub {
+      font-size: 0.58rem;
+      color: ${theme.muted};
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .all-langs {
+      margin-top: 8px;
+      border-top: 1px solid ${theme.border};
+      padding-top: 6px;
+    }
+
+    .all-langs summary {
+      cursor: pointer;
+      font-size: 0.7rem;
+      color: ${theme.accent};
+      padding: 2px 0;
+      user-select: none;
+    }
+
+    .legend-scroll {
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 6px;
+      padding-right: 4px;
     }
 
     .legend-list {
@@ -473,31 +571,35 @@ export const getDashboardHtml = (
     ${subrepoCard}
   </div>
 
-  ${gitSection}
+  ${gitStatsSection}
 
-  <div class="overview">
-    <div class="chart-card">
-      <h2>Distribution</h2>
-      <div class="chart-wrap">
-        <canvas id="chart"></canvas>
-      </div>
+  <div class="dash-grid">
+    <div class="col-main">${gitMainColumn}
     </div>
-    <div class="legend-card">
-      <div class="legend-list">
-        ${data.languages
-            .map((lang, i) => {
-                const pct =
-                    data.totalCode > 0 ? ((lang.code / data.totalCode) * 100).toFixed(1) : '0';
-                return `
-          <div class="legend-item">
-            <span class="legend-dot" style="background: ${chartColors[i]}"></span>
-            <span class="legend-name">${escapeHtml(lang.name)}</span>
-            <span class="legend-files">${lang.nFiles} files</span>
-            <span class="legend-code">${lang.code.toLocaleString()} (${pct}%)</span>
-          </div>`;
-            })
-            .join('')}
+    <div class="lang-card">
+      <h2 class="card-title">Languages</h2>
+      <div class="lang-body">
+        <div class="donut-wrap">
+          <canvas id="chart"></canvas>
+          <div class="donut-center">
+            <div class="donut-total">${data.totalCode.toLocaleString()}</div>
+            <div class="donut-sub">lines of code</div>
+          </div>
+        </div>
+        <div class="legend-list">
+          ${donutLangs.map(renderLangRow).join('')}
+        </div>
       </div>
+      ${
+          restLangs.length > 0
+              ? `<details class="all-langs">
+        <summary>Show remaining ${restLangs.length} languages</summary>
+        <div class="legend-list legend-scroll">
+          ${restLangs.map(renderLangRow).join('')}
+        </div>
+      </details>`
+              : ''
+      }
     </div>
   </div>
 
@@ -540,9 +642,9 @@ export const getDashboardHtml = (
       }
     });
 
-    const labels = ${JSON.stringify(data.languages.map((l) => l.name))};
-    const values = ${JSON.stringify(data.languages.map((l) => l.code))};
-    const colors = ${JSON.stringify(chartColors)};
+    const labels = ${JSON.stringify(donutLangs.map((l) => l.name))};
+    const values = ${JSON.stringify(donutLangs.map((l) => l.code))};
+    const colors = ${JSON.stringify(donutLangs.map((l) => l.color))};
 
     new Chart(document.getElementById("chart"), {
       type: "doughnut",
@@ -576,6 +678,7 @@ export const getDashboardHtml = (
     const gitAvailable = ${JSON.stringify(git.available)};
     if (gitAvailable) {
       const gitLabels = ${JSON.stringify(GitChangeAnalyzer.formatGitChartLabels(git.days))};
+      const gitDates = ${JSON.stringify(git.days.map((d) => d.date))};
       const gitAdded = ${JSON.stringify(git.days.map((d) => d.added))};
       const gitDeleted = ${JSON.stringify(git.days.map((d) => d.deleted))};
       const gitNet = ${JSON.stringify(git.days.map((d) => d.net))};
@@ -612,7 +715,7 @@ export const getDashboardHtml = (
               borderWidth: 2,
               pointRadius: 2,
               pointHoverRadius: 4,
-              tension: 0.25,
+              tension: 0,
               yAxisID: "y",
               order: 1,
             },
@@ -634,6 +737,7 @@ export const getDashboardHtml = (
             },
             tooltip: {
               callbacks: {
+                title: (items) => items.length ? gitDates[items[0].dataIndex] + " — daily total" : "",
                 label: (ctx) => {
                   const prefix = ctx.dataset.label ? ctx.dataset.label + ": " : "";
                   const value = ctx.raw;
@@ -647,12 +751,13 @@ export const getDashboardHtml = (
           },
           scales: {
             x: {
-              ticks: { color: gitMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 10, font: { size: 10 } },
+              ticks: { color: gitMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 15, font: { size: 10 } },
               grid: { color: gitGrid },
             },
             y: {
               ticks: { color: gitMuted, font: { size: 10 } },
               grid: { color: gitGrid },
+              title: { display: true, text: "lines / day", color: gitMuted, font: { size: 10 } },
             },
           },
         },

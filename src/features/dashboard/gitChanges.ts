@@ -17,7 +17,6 @@ export interface GitDayChange {
     added: number;
     deleted: number;
     net: number;
-    isMonth?: boolean;
 }
 
 export interface UncommittedFile {
@@ -66,9 +65,8 @@ interface GitDailyStats {
 }
 
 export class GitChangeAnalyzer {
-    static readonly HISTORY_DAYS = 120;
-    static readonly RECENT_DAYS = 7;
-    static readonly MONTH_COLUMNS = 3;
+    /** Days of committed history shown in the chart (one column per day, today included). */
+    static readonly CHART_DAYS = 30;
     static readonly UNCOMMITTED_FILE_LIMIT = 20;
     static readonly NUMSTAT_RE = /^(\d+|-)\t(\d+|-)\t/;
     static readonly NUMSTAT_FILE_RE = /^(\d+|-)\t(\d+|-)\t(.+)$/;
@@ -151,7 +149,7 @@ export class GitChangeAnalyzer {
             stats: {
                 available: anyAvailable,
                 message: anyAvailable ? undefined : 'No git history available',
-                days: this.buildMixedSeries(mergedByDate),
+                days: GitChangeAnalyzer.buildDailySeries(mergedByDate),
                 today: GitChangeAnalyzer.toLineStats(todayAdded, todayDeleted),
                 uncommittedNet: totalUncommitted,
                 uncommittedFiles: this.rankUncommittedFiles([...mergedFiles.values()]),
@@ -161,13 +159,7 @@ export class GitChangeAnalyzer {
     }
 
     static formatGitChartLabels(days: GitDayChange[]): string[] {
-        return days.map((day) => {
-            if (day.isMonth) {
-                const [year, month] = day.date.split('-');
-                return `${month}/${year}`;
-            }
-            return GitChangeAnalyzer.formatShortDate(day.date);
-        });
+        return days.map((day) => GitChangeAnalyzer.formatShortDate(day.date));
     }
 
     // ─── Private: Git execution ───────────────────────────────────────────────
@@ -203,7 +195,7 @@ export class GitChangeAnalyzer {
 
         const args = [
             'log',
-            `--since=${GitChangeAnalyzer.HISTORY_DAYS} days ago`,
+            `--since=${GitChangeAnalyzer.CHART_DAYS} days ago`,
             '--format=%ad',
             '--date=short',
             '--numstat',
@@ -389,50 +381,15 @@ export class GitChangeAnalyzer {
         }
     }
 
-    // ─── Private: Time series ─────────────────────────────────────────────────
+    // ─── Time series ──────────────────────────────────────────────────────────
 
-    private buildMixedSeries(byDate: Map<string, DailyBucket>, now = new Date()): GitDayChange[] {
+    /** One column per day for the last `CHART_DAYS` days (oldest first, today last); gaps are zero. */
+    static buildDailySeries(byDate: Map<string, DailyBucket>, now = new Date()): GitDayChange[] {
         const result: GitDayChange[] = [];
         const cursor = new Date(now);
         cursor.setHours(0, 0, 0, 0);
 
-        const recentStart = new Date(cursor);
-        recentStart.setDate(cursor.getDate() - (GitChangeAnalyzer.RECENT_DAYS - 1));
-        const recentStartKey = GitChangeAnalyzer.localDateKey(recentStart);
-
-        for (let offset = GitChangeAnalyzer.MONTH_COLUMNS - 1; offset >= 0; offset--) {
-            const monthDate = new Date(cursor.getFullYear(), cursor.getMonth() - offset, 1);
-            const year = monthDate.getFullYear();
-            const month = monthDate.getMonth();
-            const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-
-            let added = 0;
-            let deleted = 0;
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-            for (let day = 1; day <= daysInMonth; day++) {
-                const key = `${monthKey}-${String(day).padStart(2, '0')}`;
-                if (key >= recentStartKey) {
-                    continue;
-                }
-                const bucket = byDate.get(key);
-                if (!bucket) {
-                    continue;
-                }
-                added += bucket.added;
-                deleted += bucket.deleted;
-            }
-
-            result.push({
-                date: monthKey,
-                added,
-                deleted,
-                net: added - deleted,
-                isMonth: true,
-            });
-        }
-
-        for (let i = GitChangeAnalyzer.RECENT_DAYS - 1; i >= 0; i--) {
+        for (let i = GitChangeAnalyzer.CHART_DAYS - 1; i >= 0; i--) {
             const date = new Date(cursor);
             date.setDate(cursor.getDate() - i);
             const key = GitChangeAnalyzer.localDateKey(date);
@@ -524,7 +481,7 @@ export class GitChangeAnalyzer {
         return {
             available: daily.available,
             message: daily.message,
-            days: this.buildMixedSeries(daily.byDate),
+            days: GitChangeAnalyzer.buildDailySeries(daily.byDate),
             today: daily.today,
             uncommittedNet: daily.uncommittedNet,
             uncommittedFiles: this.rankUncommittedFiles(daily.uncommittedFiles),

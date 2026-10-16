@@ -1,12 +1,9 @@
 import { ImportIndex } from '../../shared/javascript/importGraph';
 import { DeadCodeAnalyzer } from '../code-analyze/deadCode';
 import { UnusedExportItem } from '../code-analyze/types';
+import { isTestPath } from './graphFilter';
 
-/** Paths of test code: never "unused" themselves, and imports from them alone do not count as use. */
-const TEST_PATH_RE =
-    /(^|\/)(__tests__|__mocks__|tests?|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$|Tests?\.(java|kt)$|(^|\/)test_[^/]*\.py$|_test\.py$/;
-
-export const isTestPath = (rel: string): boolean => TEST_PATH_RE.test(rel);
+export { isTestPath };
 
 export type UsageFlag = 'unused' | 'test-only';
 

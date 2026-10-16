@@ -94,6 +94,65 @@ const clusterStyles = (t: GraphTheme): string => `
     .search-results button.active { background: ${t.accentSoft}; }
     .search-results .kind { color: ${t.muted}; margin-right: 6px; }
 
+    .filter {
+      position: relative;
+      flex: 0 1 260px;
+      min-width: 150px;
+    }
+
+    .filter input {
+      width: 100%;
+      padding: 5px 8px;
+      font-size: 0.7rem;
+      font-family: ui-monospace, Menlo, monospace;
+      border: 1px solid ${t.border};
+      border-radius: 6px;
+      background: ${t.bg};
+      color: ${t.text};
+    }
+
+    .filter input:focus { outline: 1px solid ${t.accent}; outline-offset: 1px; }
+    .filter input.invalid { border-color: ${t.error}; }
+    .filter input.invalid:focus { outline-color: ${t.error}; }
+
+    .filter-msg {
+      position: absolute;
+      top: calc(100% + 3px);
+      left: 0;
+      z-index: 20;
+      max-width: 380px;
+      padding: 3px 8px;
+      font-size: 0.64rem;
+      border: 1px solid ${t.error};
+      border-radius: 6px;
+      background: ${t.bg};
+      color: ${t.error};
+    }
+
+    .filter-msg[hidden] { display: none; }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-color: ${t.accent};
+    }
+
+    .filter-chip[hidden] { display: none; }
+
+    .filter-chip button {
+      appearance: none;
+      border: 0;
+      background: none;
+      color: ${t.muted};
+      cursor: pointer;
+      padding: 0 2px;
+      font-size: 0.7rem;
+      line-height: 1;
+    }
+
+    .filter-chip button:hover { color: ${t.error}; }
+
     .toggle {
       display: inline-flex;
       align-items: center;
@@ -274,7 +333,19 @@ export const getClusterGraphHtml = (
       <input id="search" type="search" placeholder="Find file or folder…" autocomplete="off" aria-label="Find file or folder">
       <div id="search-results" class="search-results" role="listbox"></div>
     </div>
+    <div class="filter">
+      <input id="filter-text" type="text" placeholder="Filter files: src/**  !**/*.test.*  auth" spellcheck="false" autocomplete="off" aria-label="Filter which files are in the graph" aria-invalid="false" title="Which files are in the graph. Comma or space separated patterns, relative to the workspace root; a leading ! excludes. Plain text (auth) keeps paths containing it; globs (src/features/**, *.ts) use * ** ? {a,b}. A pattern without / matches a file or folder name at any depth. Excludes always win; empty = all files.">
+      <div id="filter-msg" class="filter-msg" role="alert" hidden></div>
+    </div>
+    <label class="toggle" title="Leave out test files (*.test.*, *.spec.*, __tests__/, test/, …)"><input type="checkbox" id="filter-tests"> Hide tests</label>
+    <select id="filter-min" class="mode-select" aria-label="Minimum importers" title="Keep only files imported by at least this many other files (counted among the files left by the filter)">
+      <option value="0">Importers: any</option>
+      <option value="1">Importers: 1+</option>
+      <option value="2">Importers: 2+</option>
+      <option value="5">Importers: 5+</option>
+    </select>
     <div class="toolbar-meta">
+      <span class="chip filter-chip" id="chip-filter" hidden title="A filter is limiting the graph"><span id="chip-filter-text"></span><button type="button" id="filter-clear" aria-label="Clear filter" title="Clear filter">✕</button></span>
       <span class="chip" id="chip-files" title="Files in this level / whole index"></span>
       <span class="chip" id="chip-io" title="Imports crossing this folder: into it / out of it"></span>
       <button type="button" class="chip cycles" id="chip-cycles" title="Groups of nodes that import each other in a loop — click to list"></button>
@@ -728,6 +799,8 @@ export const getClusterGraphHtml = (
       nodeKinds = new Map(next.nodes.map((node) => [node.id, node]));
       renderCrumbs(next.crumbs);
       renderStats(next.stats);
+      renderFilterChip(next.filter);
+      filterPending = false;
       document.getElementById("empty").hidden = next.nodes.length > 0;
 
       allEdges = next.edges;
@@ -1213,6 +1286,78 @@ export const getClusterGraphHtml = (
       if (!event.target.closest || !event.target.closest(".search")) closeSearch();
     });
 
+    // ─── user filter ──────────────────────────────────────────────
+
+    const filterText = document.getElementById("filter-text");
+    const filterTests = document.getElementById("filter-tests");
+    const filterMin = document.getElementById("filter-min");
+    const filterMsg = document.getElementById("filter-msg");
+    const filterChip = document.getElementById("chip-filter");
+    let filterTimer;
+    let filterPending = false;
+    let sentFilter = null;
+
+    function filterKey() {
+      return JSON.stringify([filterText.value, filterTests.checked, filterMin.value]);
+    }
+
+    function showFilterError(message) {
+      filterMsg.textContent = message || "";
+      filterMsg.hidden = !message;
+      filterText.classList.toggle("invalid", Boolean(message));
+      filterText.setAttribute("aria-invalid", message ? "true" : "false");
+    }
+
+    function renderFilterChip(info) {
+      if (!info) {
+        filterChip.hidden = true;
+        return;
+      }
+      document.getElementById("chip-filter-text").innerHTML =
+        "Filter: <strong>" + info.kept.toLocaleString() + "</strong> of " + info.total.toLocaleString() + " files";
+      filterChip.hidden = false;
+    }
+
+    function sendFilter() {
+      clearTimeout(filterTimer);
+      const key = filterKey();
+      if (key === sentFilter) return;
+      sentFilter = key;
+      filterPending = true;
+      setLoading("Applying filter…");
+      vscode.postMessage({
+        type: "filter",
+        text: filterText.value,
+        hideTests: filterTests.checked,
+        minImporters: Number(filterMin.value),
+        path: level ? level.path : undefined,
+        focus: selectedFile || undefined,
+      });
+    }
+
+    function scheduleFilter(delay) {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(sendFilter, delay);
+    }
+
+    filterText.addEventListener("input", () => scheduleFilter(400));
+    filterText.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        sendFilter();
+      } else if (event.key === "Escape" && filterText.value) {
+        filterText.value = "";
+        sendFilter();
+      }
+    });
+    filterTests.addEventListener("change", () => scheduleFilter(0));
+    filterMin.addEventListener("change", () => scheduleFilter(0));
+    document.getElementById("filter-clear").addEventListener("click", () => {
+      filterText.value = "";
+      filterTests.checked = false;
+      filterMin.value = "0";
+      sendFilter();
+    });
+
     // ─── messages ─────────────────────────────────────────────────
 
     window.addEventListener("message", (event) => {
@@ -1235,6 +1380,19 @@ export const getClusterGraphHtml = (
           break;
         case "loading":
           setLoading(msg.message);
+          break;
+        case "filterInit":
+          filterText.value = msg.options.text;
+          filterTests.checked = msg.options.hideTests;
+          filterMin.value = String(msg.options.minImporters);
+          sentFilter = filterKey();
+          break;
+        case "filterStatus":
+          showFilterError(msg.error);
+          if (msg.error && filterPending) {
+            filterPending = false;
+            setLoading(null);
+          }
           break;
         case "error":
           reloadBtn.disabled = false;

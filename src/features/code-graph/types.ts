@@ -83,6 +83,8 @@ export interface ClusterLevel {
     /** Full map: files left out to stay drawable. */
     truncated?: number;
     focus?: string;
+    /** A user filter is active: files kept / files the index scanned. */
+    filter?: { kept: number; total: number };
     stats: {
         files: number;
         totalFiles: number;

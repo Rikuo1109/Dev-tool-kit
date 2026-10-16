@@ -44,7 +44,10 @@ const resolveFileUri = async (uri?: vscode.Uri): Promise<vscode.Uri | undefined>
     return undefined;
 };
 
-const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
+const createCommands = (
+    extensionUri: vscode.Uri,
+    workspaceState: vscode.Memento,
+): CommandDefinition[] => [
     {
         id: 'kyo-tools.initAiTemplate',
         errorTitle: 'Init AI Template failed',
@@ -73,7 +76,7 @@ const createCommands = (extensionUri: vscode.Uri): CommandDefinition[] => [
         errorTitle: 'Failed to build code graph',
         resolveFileOrWorkspace: true,
         handler: async (uri) => {
-            await openCodeGraph(uri!, extensionUri);
+            await openCodeGraph(uri!, extensionUri, workspaceState);
         },
     },
     {
@@ -166,7 +169,7 @@ const wrapHandler = (
 export const registerCommands = (context: vscode.ExtensionContext): void => {
     const extensionUri = context.extensionUri;
 
-    for (const definition of createCommands(extensionUri)) {
+    for (const definition of createCommands(extensionUri, context.workspaceState)) {
         context.subscriptions.push(
             vscode.commands.registerCommand(definition.id, wrapHandler(definition, extensionUri)),
         );

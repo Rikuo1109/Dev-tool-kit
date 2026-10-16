@@ -9,6 +9,13 @@ import { ImportIndex } from '../../shared/javascript/importGraph';
 import { openFileInEditor } from '../../shared/openInEditor';
 import { ClusterModel } from './clusterGraph';
 import { getClusterGraphHtml } from './clusterPanel';
+import {
+    createFilteredIndex,
+    DEFAULT_GRAPH_FILTER,
+    evaluateGraphFilter,
+    GraphFilterOptions,
+    sanitizeGraphFilter,
+} from './graphFilter';
 import { groupDirOf, GroupMode } from './groupTree';
 import { GraphInsights } from './insights';
 import { getCodeGraphHtml, getCodeGraphLoadingHtml } from './panel';
@@ -27,6 +34,8 @@ export type { CodeGraphData, GraphExpansion } from './types';
 /** Ask before copying more than this many characters (~250k tokens). */
 const LARGE_COPY_CHARS = 1_000_000;
 const STALE_DEBOUNCE_MS = 500;
+/** Workspace-state key holding the user's graph filter (text + toggles). */
+const FILTER_STATE_KEY = 'kyo-tools.codeGraph.filter';
 
 const indexFileSets = new WeakMap<ImportIndex, Set<string>>();
 
@@ -303,7 +312,11 @@ const stringArray = (value: unknown): string[] => {
  * Opens the folder-cluster graph positioned at `uri` (a file is selected inside its folder,
  * a folder is entered). "Focus graph" switches the same panel to the single-file view.
  */
-export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): Promise<void> => {
+export const openCodeGraph = async (
+    uri: vscode.Uri,
+    extensionUri: vscode.Uri,
+    state?: vscode.Memento,
+): Promise<void> => {
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
     if (!workspaceFolder) {
         throw new Error('File is not inside a workspace folder');
@@ -327,8 +340,14 @@ export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): 
         cspSource: panel.webview.cspSource,
     });
 
+    /** Everything the scanner found; the focus view always reads this. */
+    let baseIndex: ImportIndex | undefined;
+    /** What clusters, insights and the full map read: `baseIndex` narrowed by the user's filter. */
     let index: ImportIndex | undefined;
     let model: ClusterModel | undefined;
+    /** The filter as the user left it (persisted); may be invalid or match nothing. */
+    let typedFilter: GraphFilterOptions = sanitizeGraphFilter(state?.get(FILTER_STATE_KEY));
+    let filterInfo: { kept: number; total: number } | undefined;
     let insights: GraphInsights | undefined;
     let mode: GroupMode = 'folders';
     /** Models per grouping mode for the current index (community detection is built on demand). */
@@ -345,19 +364,30 @@ export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): 
         }
     };
 
+    /** Makes `kept` (or everything, when null) the graph's file set and rebuilds what depends on it. */
+    const commitView = (kept: Set<string> | null) => {
+        const base = baseIndex!;
+        index = kept ? createFilteredIndex(base, kept) : base;
+        filterInfo = kept ? { kept: kept.size, total: base.files.length } : undefined;
+        models = {};
+        post({ type: 'loading', message: 'Finding unused files and hubs…' });
+        insights = new GraphInsights(index);
+    };
+
     const ensureModel = async (force = false): Promise<ClusterModel> => {
-        if (force || !index) {
+        if (force || !baseIndex) {
             post({ type: 'loading', message: force ? 'Rebuilding index…' : 'Building index…' });
-            index = await getOrBuildIndex(workspaceFolder, force);
-            models = {};
-            post({ type: 'loading', message: 'Finding unused files and hubs…' });
-            insights = new GraphInsights(index);
+            baseIndex = await getOrBuildIndex(workspaceFolder, force);
+            // The saved filter is re-applied on every rebuild; one that no longer fits is dropped.
+            const evaluated = evaluateGraphFilter(baseIndex, typedFilter);
+            commitView(evaluated.kept);
+            post({ type: 'filterStatus', error: evaluated.error });
         }
         if (!models[mode]) {
             if (mode === 'communities') {
                 post({ type: 'loading', message: 'Detecting communities…' });
             }
-            models[mode] = new ClusterModel(index, mode);
+            models[mode] = new ClusterModel(index!, mode);
         }
         model = models[mode];
         return model!;
@@ -372,6 +402,7 @@ export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): 
         }
         fullView = true;
         const built = model.buildFullMap();
+        built.filter = filterInfo;
         post({ type: 'level', level: insights ? decorateLevel(built, model, insights) : built });
     };
 
@@ -381,6 +412,7 @@ export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): 
         }
         fullView = false;
         const built = model.buildLevel(level, { showPackages, focus });
+        built.filter = filterInfo;
         post({ type: 'level', level: insights ? decorateLevel(built, model, insights) : built });
     };
 
@@ -414,11 +446,12 @@ export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): 
         panel.title = `Code Graph — ${path.basename(target)}`;
         panel.webview.html = getCodeGraphLoadingHtml(relativePath, isDarkTheme());
         try {
-            if (force || !index) {
+            if (force || !baseIndex) {
                 await ensureModel(force);
             }
+            // The focus view ignores the filter: it always shows the file's real neighbours.
             panel.webview.html = getCodeGraphHtml(
-                buildFocusGraph(target, index!),
+                buildFocusGraph(target, baseIndex!),
                 isDarkTheme(),
                 assets(),
             );
@@ -485,8 +518,33 @@ export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): 
         switch (message?.type) {
             // ── cluster view ──
             case 'ready':
+                post({ type: 'filterInit', options: typedFilter });
                 await sendTarget(clusterTarget);
                 return;
+            case 'filter': {
+                typedFilter = sanitizeGraphFilter(message);
+                void state?.update(FILTER_STATE_KEY, typedFilter);
+                await ensureModel();
+                const evaluated = evaluateGraphFilter(baseIndex!, typedFilter);
+                post({ type: 'filterStatus', error: evaluated.error });
+                if (evaluated.error) {
+                    // Keep the graph as it is; the panel shows the problem next to the box.
+                    return;
+                }
+                commitView(evaluated.kept);
+                const current = await ensureModel();
+                if (fullView) {
+                    sendFullMap();
+                    return;
+                }
+                // Stay on the same level (and file) when it still exists in the filtered graph.
+                const focus =
+                    typeof message.focus === 'string' && current.absOf(message.focus)
+                        ? message.focus
+                        : undefined;
+                sendLevel(typeof message.path === 'string' ? message.path : current.rootLevel, focus);
+                return;
+            }
             case 'navigate': {
                 await ensureModel();
                 const focus = typeof message.focus === 'string' ? message.focus : undefined;
@@ -593,8 +651,8 @@ export const openCodeGraph = async (uri: vscode.Uri, extensionUri: vscode.Uri): 
                 showClusters(typeof message.path === 'string' ? message.path : clusterTarget);
                 return;
             case 'expand':
-                if (typeof message.path === 'string' && index) {
-                    post({ type: 'expandResult', ...expandFocusNode(message.path, index) });
+                if (typeof message.path === 'string' && baseIndex) {
+                    post({ type: 'expandResult', ...expandFocusNode(message.path, baseIndex) });
                 }
                 return;
             case 'copy':
